@@ -87,5 +87,5 @@ Created by Darnix
 If you encounter any issues:
 1. Make sure you're running as administrator
 2. Check if all requirements are met
-3. [Open an issue](https://github.com/yourusername/Multitool/issues)
+3. [Open an issue](https://github.com/darnix-a/Multitool/issues)
 
