@@ -46,7 +46,7 @@ A comprehensive Windows system and file management utility with an easy-to-use i
 
 ## Installation 💿
 
-1. Download the latest release from the [Releases](https://github.com/yourusername/Multitool/releases) page
+1. Download the latest release from the [Releases](https://github.com/Darnix-a/Multitool/releases) page
 2. Run the exe file
 3. If prompted, allow administrator access (required for some features)
 
