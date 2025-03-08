@@ -1,0 +1,14 @@
+psutil
+cryptography
+pyinstaller
+colorama
+tqdm
+humanize
+keyboard
+pywin32
+watchdog
+pyautogui
+pillow
+wmi
+pyperclip
+winshell
