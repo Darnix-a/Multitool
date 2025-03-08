@@ -2,7 +2,7 @@
 
 A comprehensive Windows system and file management utility with an easy-to-use interface.
 
-![Screenshot of Multitool](screenshot.png)
+![Screenshot of Multitool](https://github.com/Darnix-a/Multitool/blob/main/multitool.png)
 
 ## Features 🌟
 
