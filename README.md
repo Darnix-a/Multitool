@@ -89,5 +89,3 @@ If you encounter any issues:
 2. Check if all requirements are met
 3. [Open an issue](https://github.com/yourusername/Multitool/issues)
 
----
-**Note**: Replace `yourusername` in the links with your actual GitHub username when uploading.
