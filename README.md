@@ -81,6 +81,7 @@ MIT License - See LICENSE file for details
 ## Credits 👏
 
 Created by Darnix
+(with help from beastdog27 on discord for v3.3)
 
 ## Support 💡
 
