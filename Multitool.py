@@ -1,41 +1,86 @@
+#!/usr/bin/env python3
+"""
+Multitool v3.3 - Enhanced File Management and System Utility Tool
+Author: Darnix (Original)
+Improvements: Added modular structure, better error handling, performance optimizations,
+             enhanced documentation, code organization, and security enhancements
+"""
+
+# Standard library imports
 import os
 import shutil
-from pathlib import Path
 import hashlib
-import datetime
-import psutil
-import platform
-import subprocess
-from cryptography.fernet import Fernet
 import json
 import time
-from datetime import datetime
-from colorama import init, Fore, Back, Style
-from tqdm import tqdm
-import mimetypes
-import humanize
-import keyboard
 import stat
-import win32security
-import win32api
-import win32con
-import win32file
-from datetime import timedelta
 import threading
 import logging
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-import pyautogui
 import re
 import random
 import sys
 import fnmatch
+from pathlib import Path
+from datetime import datetime, timedelta
+import subprocess
+import mimetypes
+from typing import Dict, List, Tuple, Optional, Union, Any
+import concurrent.futures
+
+
+# Third-party imports
+import psutil
+import platform
+from cryptography.fernet import Fernet
+from colorama import init, Fore, Back, Style
+from tqdm import tqdm
+import humanize
+import keyboard
+import pyautogui
+
+# Windows-specific imports
+try:
+    import win32security
+    import win32api
+    import win32con
+    import win32file
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
+except ImportError:
+    # Handle case when running on non-Windows platforms
+    pass
 
 init(autoreset=True)
 
-PROGRAM_NAME = "Multitool v3.2"
+# Global constants
+PROGRAM_NAME = "Multitool v3.3"
+CHUNK_SIZE = 64 * 1024  # 64KB chunks for file operations
+MAX_WORKERS = 4  # Maximum number of worker threads for parallel operations
+
+# Third-party imports
+import psutil
+import platform
+from cryptography.fernet import Fernet
+from colorama import init, Fore, Back, Style
+from tqdm import tqdm
+import humanize
+import keyboard
+import pyautogui
+
+# Windows-specific imports
+try:
+    import win32security
+    import win32api
+    import win32con
+    import win32file
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
+except ImportError:
+    # Handle case when running on non-Windows platforms
+    pass
+
 
 def display_header():
+    """Display the program header with formatting"""
     width = min(os.get_terminal_size().columns, 60)
     print(f"{Fore.CYAN}╔═{'═' * (width-4)}═╗")
     print(f"{Fore.CYAN}║ {Back.BLUE + Fore.WHITE + Style.BRIGHT}{PROGRAM_NAME.center(width-4)}{Style.RESET_ALL + Fore.CYAN} ║")
@@ -43,6 +88,7 @@ def display_header():
     print(f"{Fore.CYAN}╠═{'═' * (width-4)}═╣")
 
 def display_menu_section(title, options, start_num):
+    """Display a section of the menu with options"""
     width = min(os.get_terminal_size().columns, 60)
     print(f"{Fore.CYAN}║ {Fore.CYAN + Style.BRIGHT}{title}{' ' * (width-3-len(title))}║")
     print(f"{Fore.CYAN}╠═{'═' * (width-4)}═╣")
@@ -53,6 +99,12 @@ def display_menu_section(title, options, start_num):
         print(f"{Fore.CYAN}║{Fore.YELLOW} {i}{Fore.WHITE} {option_text}{' ' * remaining_space}{Fore.CYAN}║")
 
 def preview_file(filepath):
+    """
+    Display a preview of a file including metadata and content for text files
+    
+    Args:
+        filepath (str): Path to the file to preview
+    """
     try:
         mime_type, _ = mimetypes.guess_type(filepath)
         size = os.path.getsize(filepath)
@@ -71,6 +123,7 @@ def preview_file(filepath):
         print(f"{Fore.RED}Preview error: {e}")
 
 def quick_actions():
+    """Menu for quick file operations"""
     actions = [
         "Sort files by size (largest first)",
         "Sort files by date (newest first)",
@@ -132,46 +185,167 @@ def quick_actions():
         if choice != "5":
             input(f"\n{Fore.CYAN}Press Enter to continue...")
 
-def get_file_hash(filepath):
-    hasher = hashlib.md5()
-    with open(filepath, 'rb') as f:
-        buf = f.read(65536)
-        while len(buf) > 0:
-            hasher.update(buf)
-            buf = f.read(65536)
-    return hasher.hexdigest()
+def get_file_hash(filepath: str, algorithm: str = 'md5') -> Optional[str]:
+    """
+    Calculate hash of a file using efficient buffered reading.
+    
+    Args:
+        filepath (str): Path to the file
+        algorithm (str): Hash algorithm to use ('md5', 'sha1', 'sha256')
+        
+    Returns:
+        Optional[str]: Hexadecimal hash of the file or None if error
+    """
+    if algorithm == 'md5':
+        hasher = hashlib.md5()
+    elif algorithm == 'sha1':
+        hasher = hashlib.sha1()
+    elif algorithm == 'sha256':
+        hasher = hashlib.sha256()
+    else:
+        print(f"{Fore.RED}Unsupported hash algorithm: {algorithm}")
+        return None
+        
+    try:
+        with open(filepath, 'rb') as f:
+            buf = f.read(CHUNK_SIZE)
+            while len(buf) > 0:
+                hasher.update(buf)
+                buf = f.read(CHUNK_SIZE)
+        return hasher.hexdigest()
+    except (PermissionError, FileNotFoundError) as e:
+        print(f"{Fore.RED}Error hashing file {filepath}: {str(e)}")
+        return None
 
-def search_files(directory, pattern):
+def search_files(directory, pattern, use_regex=False):
+    """
+    Search for files in a directory that match a pattern.
+    
+    Args:
+        directory (str): Directory to search in
+        pattern (str): Pattern to match against filenames
+        use_regex (bool): Whether to use regex matching instead of substring matching
+        
+    Returns:
+        list: List of matching file paths
+    """
     found_files = []
-    for root, _, files in os.walk(directory):
-        for file in files:
-            if pattern.lower() in file.lower():
-                found_files.append(os.path.join(root, file))
-    return found_files
-
-def find_duplicates(directory):
-    print("Scanning for duplicates (this might take a while)...")
-    hash_dict = {}
-    total_files = sum([len(files) for _, _, files in os.walk(directory)])
-    processed = 0
-    
-    for root, _, files in os.walk(directory):
-        for filename in files:
-            try:
-                filepath = os.path.join(root, filename)
-                file_hash = get_file_hash(filepath)
-                if file_hash in hash_dict:
-                    hash_dict[file_hash].append(filepath)
+    try:
+        if use_regex:
+            regex = re.compile(pattern, re.IGNORECASE)
+            
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if use_regex:
+                    if regex.search(file):
+                        found_files.append(os.path.join(root, file))
                 else:
-                    hash_dict[file_hash] = [filepath]
-                processed += 1
-                print(f"Progress: {processed}/{total_files} files scanned\r", end="")
-            except (PermissionError, OSError):
-                continue
+                    if pattern.lower() in file.lower():
+                        found_files.append(os.path.join(root, file))
+        return found_files
+    except Exception as e:
+        print(f"{Fore.RED}Error searching files: {str(e)}")
+        return []
+
+def find_duplicates(directory: str) -> Dict[str, List[str]]:
+    """
+    Find duplicate files in a directory by comparing file hashes.
+    Uses parallel processing for improved performance.
     
-    return {k: v for k, v in hash_dict.items() if len(v) > 1}
+    Args:
+        directory (str): Directory to scan for duplicates
+        
+    Returns:
+        Dict[str, List[str]]: Dictionary mapping file hashes to lists of duplicate file paths
+    """
+    print(f"{Fore.YELLOW}Scanning for duplicates (this might take a while)...")
+    hash_dict = {}
+    size_dict = {}  # Group files by size first for optimization
+    
+    try:
+        # First pass: group files by size (files of different sizes cannot be duplicates)
+        print(f"{Fore.CYAN}Phase 1: Grouping files by size...")
+        for root, _, files in os.walk(directory):
+            for filename in files:
+                try:
+                    filepath = os.path.join(root, filename)
+                    file_size = os.path.getsize(filepath)
+                    
+                    # Skip empty files
+                    if file_size == 0:
+                        continue
+                    
+                    if file_size in size_dict:
+                        size_dict[file_size].append(filepath)
+                    else:
+                        size_dict[file_size] = [filepath]
+                except (PermissionError, OSError, FileNotFoundError):
+                    continue
+        
+        # Filter out unique file sizes
+        potential_duplicates = {size: files for size, files in size_dict.items() if len(files) > 1}
+        total_files_to_hash = sum(len(files) for files in potential_duplicates.values())
+        
+        if total_files_to_hash == 0:
+            print(f"{Fore.GREEN}No potential duplicates found based on file size.")
+            return {}
+            
+        print(f"{Fore.CYAN}Phase 2: Hashing {total_files_to_hash} potential duplicate files...")
+        
+        # Function to hash files in parallel
+        def hash_file_group(file_group):
+            results = []
+            for filepath in file_group:
+                file_hash = get_file_hash(filepath)
+                if file_hash:
+                    results.append((file_hash, filepath))
+            return results
+        
+        # Process files in parallel
+        processed = 0
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            # Split work into chunks for each worker
+            all_files = [filepath for files in potential_duplicates.values() for filepath in files]
+            chunk_size = max(1, len(all_files) // MAX_WORKERS)
+            file_chunks = [all_files[i:i + chunk_size] for i in range(0, len(all_files), chunk_size)]
+            
+            # Submit tasks
+            future_to_chunk = {executor.submit(hash_file_group, chunk): i for i, chunk in enumerate(file_chunks)}
+            
+            # Process results as they complete
+            for future in concurrent.futures.as_completed(future_to_chunk):
+                chunk_results = future.result()
+                for file_hash, filepath in chunk_results:
+                    if file_hash in hash_dict:
+                        hash_dict[file_hash].append(filepath)
+                    else:
+                        hash_dict[file_hash] = [filepath]
+                
+                processed += len(chunk_results)
+                progress = (processed / total_files_to_hash) * 100
+                print(f"Progress: {processed}/{total_files_to_hash} files hashed ({progress:.1f}%)\r", end="")
+        
+        # Filter out unique files
+        duplicate_dict = {k: v for k, v in hash_dict.items() if len(v) > 1}
+        duplicate_count = sum(len(v)-1 for v in duplicate_dict.values())
+        
+        print(f"\n{Fore.GREEN}Scan complete! Found {duplicate_count} duplicate files in {len(duplicate_dict)} groups.")
+        return duplicate_dict
+        
+    except Exception as e:
+        print(f"{Fore.RED}Error finding duplicates: {str(e)}")
+        return {}
 
 def analyze_disk_space(directory):
+    """
+    Analyze disk space usage by file extension in a directory
+    
+    Args:
+        directory (str): Directory to analyze
+        
+    Returns:
+        dict: Dictionary mapping file extensions to total size in bytes
+    """
     size_dict = {}
     for root, _, files in os.walk(directory):
         for file in files:
@@ -185,12 +359,28 @@ def analyze_disk_space(directory):
     return size_dict
 
 def create_folder(directory, folder_name):
+    """
+    Create a folder if it doesn't exist
+    
+    Args:
+        directory (str): Parent directory
+        folder_name (str): Name of the folder to create
+        
+    Returns:
+        str: Path to the created folder
+    """
     folder_path = os.path.join(directory, folder_name)
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
     return folder_path
 
 def organize_files(directory):
+    """
+    Organize files in a directory into category folders based on file extensions
+    
+    Args:
+        directory (str): Directory to organize
+    """
     CATEGORIES = {
         'Images': {
             'extensions': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'],
@@ -236,6 +426,17 @@ def organize_files(directory):
         print(f"An error occurred: {str(e)}")
 
 def rename_files(directory, pattern, replacement):
+    """
+    Rename files in a directory by replacing a pattern in filenames
+    
+    Args:
+        directory (str): Directory containing files to rename
+        pattern (str): Pattern to search for in filenames
+        replacement (str): Text to replace the pattern with
+        
+    Returns:
+        int: Number of files renamed
+    """
     renamed = 0
     for filename in os.listdir(directory):
         if pattern in filename:
@@ -246,7 +447,147 @@ def rename_files(directory, pattern, replacement):
             renamed += 1
     return renamed
 
+def auto_rename():
+    """
+    Bulk rename files with various options
+    
+    Returns:
+        int: Number of files renamed
+    """
+    print(f"{Fore.CYAN}Bulk File Renaming")
+    print(f"{Fore.CYAN}{'=' * 60}\n")
+    
+    print(f"{Fore.YELLOW}Rename Options:")
+    print(f"{Fore.WHITE}1. Replace text in filenames")
+    print(f"{Fore.WHITE}2. Add prefix to filenames")
+    print(f"{Fore.WHITE}3. Add suffix to filenames (before extension)")
+    print(f"{Fore.WHITE}4. Number files sequentially")
+    print(f"{Fore.WHITE}5. Convert to lowercase/uppercase")
+    print(f"{Fore.WHITE}6. Remove spaces")
+    print(f"{Fore.WHITE}7. Cancel")
+    
+    choice = input(f"\n{Fore.GREEN}Choose option (1-7): {Fore.WHITE}")
+    
+    if choice == "7":
+        return 0
+        
+    # Get files to rename
+    file_filter = input(f"{Fore.YELLOW}Enter file filter (e.g., *.jpg) or leave empty for all files: {Fore.WHITE}")
+    
+    files = []
+    if file_filter:
+        for file in os.listdir():
+            if os.path.isfile(file) and fnmatch.fnmatch(file, file_filter):
+                files.append(file)
+    else:
+        files = [f for f in os.listdir() if os.path.isfile(f)]
+    
+    if not files:
+        print(f"{Fore.RED}No matching files found!")
+        return 0
+    
+    print(f"\n{Fore.CYAN}Found {len(files)} files to rename.")
+    
+    renamed = 0
+    if choice == "1":
+        pattern = input(f"{Fore.YELLOW}Enter text to replace: {Fore.WHITE}")
+        replacement = input(f"{Fore.YELLOW}Enter replacement text: {Fore.WHITE}")
+        
+        for file in files:
+            if pattern in file:
+                new_name = file.replace(pattern, replacement)
+                try:
+                    os.rename(file, new_name)
+                    print(f"{Fore.GREEN}Renamed: {file} → {new_name}")
+                    renamed += 1
+                except Exception as e:
+                    print(f"{Fore.RED}Error renaming {file}: {e}")
+    
+    elif choice == "2":
+        prefix = input(f"{Fore.YELLOW}Enter prefix to add: {Fore.WHITE}")
+        
+        for file in files:
+            new_name = prefix + file
+            try:
+                os.rename(file, new_name)
+                print(f"{Fore.GREEN}Renamed: {file} → {new_name}")
+                renamed += 1
+            except Exception as e:
+                print(f"{Fore.RED}Error renaming {file}: {e}")
+    
+    elif choice == "3":
+        suffix = input(f"{Fore.YELLOW}Enter suffix to add: {Fore.WHITE}")
+        
+        for file in files:
+            name, ext = os.path.splitext(file)
+            new_name = name + suffix + ext
+            try:
+                os.rename(file, new_name)
+                print(f"{Fore.GREEN}Renamed: {file} → {new_name}")
+                renamed += 1
+            except Exception as e:
+                print(f"{Fore.RED}Error renaming {file}: {e}")
+    
+    elif choice == "4":
+        start_num = int(input(f"{Fore.YELLOW}Enter starting number: {Fore.WHITE}"))
+        padding = int(input(f"{Fore.YELLOW}Enter digit padding (e.g., 3 for 001): {Fore.WHITE}"))
+        keep_name = input(f"{Fore.YELLOW}Keep original filename? (y/n): {Fore.WHITE}").lower() == 'y'
+        
+        for i, file in enumerate(sorted(files), start_num):
+            name, ext = os.path.splitext(file)
+            if keep_name:
+                new_name = f"{i:0{padding}d}_{name}{ext}"
+            else:
+                new_name = f"{i:0{padding}d}{ext}"
+            try:
+                os.rename(file, new_name)
+                print(f"{Fore.GREEN}Renamed: {file} → {new_name}")
+                renamed += 1
+            except Exception as e:
+                print(f"{Fore.RED}Error renaming {file}: {e}")
+    
+    elif choice == "5":
+        case_choice = input(f"{Fore.YELLOW}Convert to (l)owercase or (u)ppercase? (l/u): {Fore.WHITE}").lower()
+        
+        for file in files:
+            if case_choice == 'l':
+                new_name = file.lower()
+            elif case_choice == 'u':
+                new_name = file.upper()
+            else:
+                print(f"{Fore.RED}Invalid choice!")
+                return 0
+                
+            if new_name != file:
+                try:
+                    os.rename(file, new_name)
+                    print(f"{Fore.GREEN}Renamed: {file} → {new_name}")
+                    renamed += 1
+                except Exception as e:
+                    print(f"{Fore.RED}Error renaming {file}: {e}")
+    
+    elif choice == "6":
+        replace_with = input(f"{Fore.YELLOW}Replace spaces with (leave empty to remove): {Fore.WHITE}")
+        
+        for file in files:
+            if ' ' in file:
+                new_name = file.replace(' ', replace_with)
+                try:
+                    os.rename(file, new_name)
+                    print(f"{Fore.GREEN}Renamed: {file} → {new_name}")
+                    renamed += 1
+                except Exception as e:
+                    print(f"{Fore.RED}Error renaming {file}: {e}")
+    
+    return renamed
+
 def get_drives():
+    """
+    Get a list of available drives on Windows
+    
+    Returns:
+        list: List of drive letters with paths (e.g., ['C:\\', 'D:\\'])
+    """
     from ctypes import windll
     drives = []
     bitmask = windll.kernel32.GetLogicalDrives()
@@ -256,6 +597,7 @@ def get_drives():
     return drives
 
 def change_directory():
+    """Interactive directory navigation function"""
     while True:
         current_dir = os.getcwd()
         print(f"\nCurrent directory: {current_dir}")
@@ -315,6 +657,12 @@ def change_directory():
             break
 
 def get_system_info():
+    """
+    Get detailed system information
+    
+    Returns:
+        dict: Dictionary containing system information
+    """
     try:
         info = {
             "OS": f"{platform.system()} {platform.release()}",
@@ -337,9 +685,11 @@ def get_system_info():
         return f"Error getting system info: {str(e)}"
 
 def clear_screen():
+    """Clear the terminal screen"""
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def show_categories():
+    """Display file categories and their associated extensions"""
     CATEGORIES = {
         'Images': {
             'extensions': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'],
@@ -377,272 +727,387 @@ def show_categories():
     except Exception as e:
         print(f"Error displaying categories: {str(e)}")
 
-def encrypt_file(filepath, key=None):
-    if not key:
-        key = Fernet.generate_key()
-        with open('encryption_key.key', 'wb') as key_file:
-            key_file.write(key)
+def encrypt_file(filepath: str, key: Optional[bytes] = None, key_path: Optional[str] = None) -> Optional[bytes]:
+    """
+    Encrypt a file using Fernet symmetric encryption with progress reporting.
     
-    f = Fernet(key)
-    with open(filepath, 'rb') as file:
-        file_data = file.read()
-    encrypted_data = f.encrypt(file_data)
-    with open(filepath + '.encrypted', 'wb') as file:
-        file.write(encrypted_data)
-    return key
-
-def decrypt_file(filepath, key):
-    f = Fernet(key)
-    with open(filepath, 'rb') as file:
-        encrypted_data = file.read()
-    decrypted_data = f.decrypt(encrypted_data)
-    output_file = filepath.replace('.encrypted', '.decrypted')
-    with open(output_file, 'wb') as file:
-        file.write(decrypted_data)
-
-def verify_file_integrity(filepath):
+    Args:
+        filepath (str): Path to the file to encrypt
+        key (bytes, optional): Encryption key to use. If None, a new key is generated.
+        key_path (str, optional): Path to save the encryption key. If None, saves to current directory.
+        
+    Returns:
+        Optional[bytes]: The encryption key used or None if error
+    """
     try:
+        if not os.path.exists(filepath):
+            print(f"{Fore.RED}File not found: {filepath}")
+            return None
+            
+        # Generate or use provided key
+        if not key:
+            key = Fernet.generate_key()
+            key_file = key_path or os.path.join(os.path.dirname(filepath), 'encryption_key.key')
+            
+            # Ensure the key is stored securely
+            try:
+                with open(key_file, 'wb') as f:
+                    f.write(key)
+                
+                # On Windows, try to make the key file hidden
+                if os.name == 'nt':
+                    try:
+                        import win32api, win32con
+                        win32api.SetFileAttributes(key_file, win32con.FILE_ATTRIBUTE_HIDDEN)
+                    except ImportError:
+                        pass
+                        
+                print(f"{Fore.GREEN}Encryption key saved to {key_file}")
+                print(f"{Fore.YELLOW}IMPORTANT: Keep this key safe. Without it, you cannot decrypt the file.")
+                
+            except Exception as e:
+                print(f"{Fore.RED}Warning: Could not save key file: {str(e)}")
+                print(f"{Fore.YELLOW}Key: {key.decode()}")
+        
+        # Create Fernet cipher
+        f = Fernet(key)
+        
+        # Get file size for progress reporting
+        file_size = os.path.getsize(filepath)
+        output_file = filepath + '.encrypted'
+        
+        # Read file in chunks to handle large files
+        with open(filepath, 'rb') as infile, open(output_file, 'wb') as outfile:
+            processed = 0
+            
+            while True:
+                chunk = infile.read(CHUNK_SIZE)
+                if not chunk:
+                    break
+                    
+                encrypted_chunk = f.encrypt(chunk)
+                outfile.write(encrypted_chunk)
+                
+                processed += len(chunk)
+                progress = (processed / file_size) * 100
+                print(f"Encrypting: {progress:.1f}% complete\r", end="")
+                
+        print(f"\n{Fore.GREEN}File encrypted successfully: {output_file}")
+        
+        # Ask if user wants to delete the original file
+        if input(f"{Fore.YELLOW}Delete original file? (y/n): {Fore.WHITE}").lower() == 'y':
+            try:
+                os.remove(filepath)
+                print(f"{Fore.GREEN}Original file deleted.")
+            except Exception as e:
+                print(f"{Fore.RED}Could not delete original file: {str(e)}")
+                
+        return key
+        
+    except Exception as e:
+        print(f"{Fore.RED}Error encrypting file: {str(e)}")
+        return None
+
+def decrypt_file(filepath, key, output_path=None):
+    """
+    Decrypt a file that was encrypted with Fernet.
+    
+    Args:
+        filepath (str): Path to the encrypted file
+        key (bytes): Decryption key
+        output_path (str, optional): Custom output path for decrypted file
+        
+    Returns:
+        bool: True if decryption was successful, False otherwise
+    """
+    try:
+        if not os.path.exists(filepath):
+            print(f"{Fore.RED}File not found: {filepath}")
+            return False
+            
+        # Create Fernet cipher
+        f = Fernet(key)
+        
+        # Determine output filename
+        if output_path:
+            output_file = output_path
+        else:
+            output_file = filepath.replace('.encrypted', '.decrypted')
+        
+        # Read and decrypt in chunks
+        with open(filepath, 'rb') as infile, open(output_file, 'wb') as outfile:
+            chunk_size = 64 * 1024  # 64KB chunks
+            while True:
+                chunk = infile.read(chunk_size)
+                if not chunk:
+                    break
+                try:
+                    decrypted_chunk = f.decrypt(chunk)
+                    outfile.write(decrypted_chunk)
+                except Exception as e:
+                    print(f"{Fore.RED}Decryption failed: {str(e)}")
+                    os.remove(output_file)  # Clean up partial file
+                    return False
+                    
+        print(f"{Fore.GREEN}File decrypted successfully: {output_file}")
+        return True
+        
+    except Exception as e:
+        print(f"{Fore.RED}Error decrypting file: {str(e)}")
+        return False
+
+def verify_file_integrity(filepath: str) -> Tuple[bool, str]:
+    """
+    Verify the integrity of a file by checking its structure and content.
+    Enhanced with more file formats and detailed checks.
+    
+    Args:
+        filepath (str): Path to the file to verify
+        
+    Returns:
+        Tuple[bool, str]: Success status and message
+    """
+    try:
+        # Extended magic numbers dictionary with more file formats
         MAGIC_NUMBERS = {
-            '.jpg': (b'\xFF\xD8\xFF', 2),
-            '.jpeg': (b'\xFF\xD8\xFF', 2),
+            # Images
+            '.jpg': (b'\xFF\xD8\xFF', 3),
+            '.jpeg': (b'\xFF\xD8\xFF', 3),
             '.png': (b'\x89PNG\r\n\x1A\n', 8),
             '.gif': (b'GIF8', 4),
+            '.bmp': (b'BM', 2),
+            '.webp': (b'RIFF', 4),
+            '.tiff': (b'\x49\x49\x2A\x00', 4),
+            
+            # Documents
             '.pdf': (b'%PDF', 4),
+            '.docx': (b'PK\x03\x04', 4),
+            '.xlsx': (b'PK\x03\x04', 4),
+            '.pptx': (b'PK\x03\x04', 4),
+            
+            # Archives
             '.zip': (b'PK\x03\x04', 4),
             '.rar': (b'Rar!\x1A\x07', 6),
             '.7z': (b'7z\xBC\xAF\x27\x1C', 6),
+            '.gz': (b'\x1F\x8B\x08', 3),
+            '.tar': (b'ustar', 5),
+            
+            # Audio/Video
             '.mp3': (b'ID3', 3),
             '.mp4': (b'ftyp', 4),
-            '.docx': (b'PK\x03\x04', 4),
-            '.xlsx': (b'PK\x03\x04', 4),
+            '.avi': (b'RIFF', 4),
+            '.wav': (b'RIFF', 4),
+            '.flac': (b'fLaC', 4),
+            
+            # Executables
+            '.exe': (b'MZ', 2),
+            '.dll': (b'MZ', 2),
+            
+            # Other
+            '.xml': (b'<?xml', 5),
+            '.html': (b'<!DOC', 5),
+            '.json': (b'{', 1)
         }
-
+        
+        # Check if file exists
         if not os.path.exists(filepath):
-            return False, "File not found"
-
-        filesize = os.path.getsize(filepath)
-        if filesize == 0:
+            return False, "File does not exist"
+            
+        # Get file size
+        file_size = os.path.getsize(filepath)
+            
+        # Check if file is empty
+        if file_size == 0:
             return False, "File is empty"
-
-        _, ext = os.path.splitext(filepath)
-        ext = ext.lower()
-
+            
+        # Check file permissions
+        if not os.access(filepath, os.R_OK):
+            return False, "File is not readable (permission denied)"
+            
+        # Check file header (magic numbers)
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext in MAGIC_NUMBERS:
+            magic, length = MAGIC_NUMBERS[ext]
+            with open(filepath, 'rb') as f:
+                file_start = f.read(length)
+                if not file_start.startswith(magic):
+                    return False, f"Invalid file header for {ext} format"
+        
+        # Calculate file hash for integrity check
+        file_hash = get_file_hash(filepath, 'sha256')
+        if not file_hash:
+            return False, "Could not calculate file hash"
+            
+        # Try to read the entire file to check for read errors
         try:
             with open(filepath, 'rb') as f:
-                if ext in MAGIC_NUMBERS:
-                    magic, length = MAGIC_NUMBERS[ext]
-                    header = f.read(length)
-                    if not header.startswith(magic):
-                        return False, f"Invalid {ext} file header - file is corrupted"
-
-                if ext in ['.txt', '.log', '.ini', '.csv', '.md', '.py', '.json', '.xml', '.html']:
-                    try:
-                        with open(filepath, 'r', encoding='utf-8') as text_f:
-                            content = text_f.read(1024)
-                            
-                            if '\0' in content:
-                                return False, "File contains null bytes - likely corrupted"
-                            
-                            non_print = sum(1 for c in content if ord(c) < 32 and c not in '\n\r\t')
-                            if non_print / len(content) > 0.25:
-                                return False, "File contains too many non-printable characters"
-                    except UnicodeDecodeError:
-                        return False, "File contains invalid text encoding"
-
-                if ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
-                    try:
-                        from PIL import Image
-                        with Image.open(filepath) as img:
-                            img.verify()
-                    except Exception as e:
-                        return False, f"Image file structure is corrupted: {str(e)}"
-
-                chunk_size = 65536
-                corrupted_chunks = 0
-                total_chunks = 0
-                
-                f.seek(0)
+                # Read in chunks to handle large files
+                processed = 0
                 while True:
-                    chunk = f.read(chunk_size)
+                    chunk = f.read(CHUNK_SIZE)
                     if not chunk:
                         break
-                    total_chunks += 1
-                    if chunk.count(b'\0' * 16) > len(chunk) / 32:
-                        corrupted_chunks += 1
-                
-                if corrupted_chunks > 0 and corrupted_chunks / total_chunks > 0.1:
-                    return False, "File contains suspicious data patterns"
-
-            return True, "File integrity check passed"
-
-        except IOError as e:
-            return False, f"Error reading file: {str(e)}"
-
-    except Exception as e:
-        return False, f"Error checking file: {str(e)}"
-
-def disk_health_check():
-    results = {
-        "space_usage": {},
-        "warnings": [],
-        "errors": [],
-        "performance": {}
-    }
-    
-    print(f"{Fore.YELLOW}Checking disk space usage...")
-    for drive in get_drives():
-        try:
-            total, used, free = shutil.disk_usage(drive)
-            percent_used = (used / total) * 100
-            results["space_usage"][drive] = {
-                "total": total,
-                "used": used,
-                "free": free,
-                "percent_used": percent_used
-            }
-            
-            if percent_used > 90:
-                results["warnings"].append(f"Critical: Drive {drive} is {percent_used:.1f}% full")
-            elif percent_used > 80:
-                results["warnings"].append(f"Warning: Drive {drive} is {percent_used:.1f}% full")
+                    processed += len(chunk)
+                    
+                    # Update progress for large files
+                    if file_size > 10 * 1024 * 1024:  # 10MB
+                        progress = (processed / file_size) * 100
+                        print(f"Verifying: {progress:.1f}% complete\r", end="")
+                        
+                # Verify we read the entire file
+                if processed != file_size:
+                    return False, f"File size mismatch: expected {file_size}, read {processed} bytes"
         except Exception as e:
-            results["errors"].append(f"Error checking drive {drive}: {str(e)}")
-    
-    try:
-        temp_dir = os.path.join(os.environ.get('TEMP', os.getcwd()), 'multitool_temp')
-        os.makedirs(temp_dir, exist_ok=True)
-        test_file = os.path.join(temp_dir, 'disk_speed_test.tmp')
-        
-        print(f"{Fore.YELLOW}Testing disk performance...")
-        size_mb = 50
-        block_size = 1024 * 1024
-        
-        start_time = time.time()
-        with open(test_file, 'wb') as f:
-            for _ in range(size_mb):
-                f.write(os.urandom(block_size))
-        write_time = time.time() - start_time
-        write_speed = size_mb / write_time
-        
-        start_time = time.time()
-        with open(test_file, 'rb') as f:
-            while f.read(block_size):
+            return False, f"Read error: {str(e)}"
+            
+        # Additional checks for specific file types
+        if ext == '.zip':
+            try:
+                import zipfile
+                if not zipfile.is_zipfile(filepath):
+                    return False, "Not a valid ZIP archive"
+                with zipfile.ZipFile(filepath) as zf:
+                    if zf.testzip() is not None:
+                        return False, "ZIP file is corrupted"
+            except ImportError:
                 pass
-        read_time = time.time() - start_time
-        read_speed = size_mb / read_time
-        
-        try:
-            os.remove(test_file)
-            os.rmdir(temp_dir)
-        except:
-            pass
-        
-        results["performance"]["write_speed"] = f"{write_speed:.1f} MB/s"
-        results["performance"]["read_speed"] = f"{read_speed:.1f} MB/s"
-        
-        if write_speed < 10:
-            results["warnings"].append(f"Slow write speed: {write_speed:.1f} MB/s")
-        if read_speed < 20:
-            results["warnings"].append(f"Slow read speed: {read_speed:.1f} MB/s")
-            
-    except Exception as e:
-        results["errors"].append(f"Could not perform disk speed test. Try running as administrator.")
-        results["errors"].append(f"Error details: {str(e)}")
-    
-    if os.name == 'nt':
-        try:
-            pass
-        except Exception as e:
-            results["errors"].append("Some checks require administrator privileges")
-    
-    return results
-
-def check_permissions(path):
-    try:
-        path = os.path.abspath(path)
-        if not os.path.exists(path):
-            return {"error": "Path not found"}
-            
-        results = {
-            "basic": {},
-            "owner": "",
-            "acl": [],
-            "attributes": []
-        }
-        
-        results["basic"] = {
-            "readable": os.access(path, os.R_OK),
-            "writable": os.access(path, os.W_OK),
-            "executable": os.access(path, os.X_OK)
-        }
-        
-        if os.name == 'nt':
-            try:
-                sd = win32security.GetFileSecurity(path, win32security.OWNER_SECURITY_INFORMATION)
-                owner_sid = sd.GetSecurityDescriptorOwner()
-                name, domain, type = win32security.LookupAccountSid(None, owner_sid)
-                results["owner"] = f"{domain}\\{name}"
                 
-                attrs = win32file.GetFileAttributes(path)
-                if attrs & win32con.FILE_ATTRIBUTE_HIDDEN:
-                    results["attributes"].append("Hidden")
-                if attrs & win32con.FILE_ATTRIBUTE_SYSTEM:
-                    results["attributes"].append("System")
-                if attrs & win32con.FILE_ATTRIBUTE_READONLY:
-                    results["attributes"].append("Read-only")
-                if attrs & win32con.FILE_ATTRIBUTE_ARCHIVE:
-                    results["attributes"].append("Archive")
-            except Exception as e:
-                results["error"] = f"Error getting Windows permissions: {str(e)}"
-        else:
+        elif ext in ['.jpg', '.jpeg', '.png', '.gif']:
             try:
-                stat_info = os.stat(path)
-                mode = stat_info.st_mode
-                results["owner"] = stat.filemode(mode)
-            except Exception as e:
-                results["error"] = f"Error getting Unix permissions: {str(e)}"
+                from PIL import Image
+                try:
+                    with Image.open(filepath) as img:
+                        img.verify()
+                except Exception:
+                    return False, f"Image file is corrupted or invalid"
+            except ImportError:
+                pass
                 
-        return results
+        return True, f"File integrity check passed (SHA256: {file_hash})"
+        
     except Exception as e:
-        return {"error": str(e)}
-
-def scan_directory(directory):
+        return False, f"Verification error: {str(e)}"
+def scan_directory(directory: str) -> Dict[str, List[str]]:
+    """
+    Enhanced scan of a directory for potential issues and security concerns.
+    Includes more comprehensive checks and parallel processing for large directories.
+    
+    Args:
+        directory (str): Directory to scan
+        
+    Returns:
+        Dict[str, List[str]]: Dictionary of issues found by category
+    """
     issues = {
         "security": [],
         "storage": [],
         "suspicious": [],
-        "recommendations": []
+        "recommendations": [],
+        "performance": []
     }
     
-    print(f"{Fore.YELLOW}Scanning directory: {directory}")
     total_size = 0
     large_files = []
+    old_files = []
+    hidden_files = []
+    suspicious_extensions = ['.exe', '.dll', '.bat', '.ps1', '.vbs', '.js', '.jar', '.sh', '.py']
+    suspicious_patterns = ['backdoor', 'hack', 'crack', 'keygen', 'password', 'admin']
     
+    print(f"{Fore.YELLOW}Scanning directory: {directory}")
+    print(f"{Fore.CYAN}This may take a while for large directories...")
+    
+    # Function to scan a single file
+    def scan_file(path):
+        file_issues = {
+            "security": [],
+            "storage": [],
+            "suspicious": [],
+            "performance": []
+        }
+        
+        try:
+            name = os.path.basename(path)
+            rel_path = os.path.relpath(path, directory)
+            size = os.path.getsize(path)
+            
+            # Check file size
+            if size > 100 * 1024 * 1024:  # 100MB
+                large_files.append((path, size))
+            
+            if size == 0:
+                file_issues["storage"].append(f"Empty file found: {rel_path}")
+            
+            # Check file age
+            mtime = os.path.getmtime(path)
+            age_days = (time.time() - mtime) / 86400
+            if age_days > 365:  # Older than 1 year
+                old_files.append((path, age_days))
+            
+            # Check for hidden files
+            if name.startswith('.') or (os.name == 'nt' and bool(os.stat(path).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN)):
+                hidden_files.append(path)
+            
+            # Check suspicious extensions
+            if any(name.lower().endswith(ext) for ext in suspicious_extensions):
+                file_issues["suspicious"].append(
+                    f"Potentially sensitive file found: {rel_path}"
+                )
+            
+            # Check suspicious patterns in filename
+            if any(pattern in name.lower() for pattern in suspicious_patterns):
+                file_issues["suspicious"].append(
+                    f"Suspicious filename pattern: {rel_path}"
+                )
+            
+            # Check file permissions
+            if not os.access(path, os.R_OK):
+                file_issues["security"].append(f"No read access to: {rel_path}")
+            
+            if os.name == 'nt' and os.access(path, os.X_OK) and name.lower().endswith(('.txt', '.doc', '.pdf', '.jpg')):
+                file_issues["security"].append(f"Unusual execute permission on non-executable: {rel_path}")
+            
+            # Check for potential malware signatures in executable files
+            if name.lower().endswith('.exe') and size < 100 * 1024:  # Small executables
+                file_issues["suspicious"].append(f"Unusually small executable: {rel_path}")
+            
+            # Performance issues
+            if name.endswith(('.log', '.tmp')) and size > 10 * 1024 * 1024:  # 10MB
+                file_issues["performance"].append(f"Large log/temp file: {rel_path} ({humanize.naturalsize(size)})")
+            
+            return file_issues, size
+            
+        except Exception as e:
+            return {"error": [f"Error scanning {os.path.basename(path)}: {str(e)}"]}, 0
+    
+    # Collect all files first
+    all_files = []
     for root, dirs, files in os.walk(directory):
         for name in files:
-            path = os.path.join(root, name)
-            try:
-                size = os.path.getsize(path)
-                total_size += size
-                if size > 100 * 1024 * 1024:
-                    large_files.append((path, size))
-                
-                if size == 0:
-                    issues["storage"].append(f"Empty file found: {name}")
-                
-                if any(name.lower().endswith(ext) for ext in ['.exe', '.dll', '.bat', '.ps1']):
-                    issues["suspicious"].append(
-                        f"Potentially sensitive file found: {name} "
-                        f"(in {os.path.basename(root)})"
-                    )
-                
-                if not os.access(path, os.R_OK):
-                    issues["security"].append(f"No read access to: {name}")
-                
-            except Exception as e:
-                continue
+            all_files.append(os.path.join(root, name))
     
-    if total_size > 1024**3:
+    # Process files in parallel for large directories
+    if len(all_files) > 100:
+        print(f"{Fore.CYAN}Processing {len(all_files)} files in parallel...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            results = list(executor.map(scan_file, all_files))
+            
+            # Combine results
+            for file_issues, size in results:
+                total_size += size
+                for category, items in file_issues.items():
+                    if category in issues:
+                        issues[category].extend(items)
+    else:
+        # Process files sequentially for smaller directories
+        for file_path in all_files:
+            file_issues, size = scan_file(file_path)
+            total_size += size
+            for category, items in file_issues.items():
+                if category in issues:
+                    issues[category].extend(items)
+    
+    # Add recommendations based on scan results
+    if total_size > 1024**3:  # 1GB
         issues["recommendations"].append(
             f"Large directory ({humanize.naturalsize(total_size)}). "
             "Consider archiving old files."
@@ -652,10 +1117,92 @@ def scan_directory(directory):
         issues["recommendations"].append("Large files found:")
         for path, size in sorted(large_files, key=lambda x: x[1], reverse=True)[:5]:
             issues["recommendations"].append(
-                f"  • {os.path.basename(path)}: {humanize.naturalsize(size)}"
+                f"  • {os.path.relpath(path, directory)}: {humanize.naturalsize(size)}"
             )
     
+    if old_files:
+        issues["recommendations"].append("Old files that might be archived:")
+        for path, age in sorted(old_files, key=lambda x: x[1], reverse=True)[:5]:
+            issues["recommendations"].append(
+                f"  • {os.path.relpath(path, directory)}: {int(age)} days old"
+            )
+    
+    if hidden_files:
+        issues["recommendations"].append(f"Found {len(hidden_files)} hidden files")
+    
     return issues
+
+def check_permissions(path):
+    """
+    Check file or directory permissions
+    
+    Args:
+        path (str): Path to check permissions for
+        
+    Returns:
+        dict: Dictionary containing permission information
+    """
+    result = {
+        "basic": {
+            "read": False,
+            "write": False,
+            "execute": False,
+            "delete": False
+        },
+        "owner": None,
+        "attributes": []
+    }
+    
+    try:
+        # Check if path exists
+        if not os.path.exists(path):
+            return {"error": "Path does not exist"}
+            
+        # Basic permissions
+        result["basic"]["read"] = os.access(path, os.R_OK)
+        result["basic"]["write"] = os.access(path, os.W_OK)
+        result["basic"]["execute"] = os.access(path, os.X_OK)
+        
+        # Windows-specific permissions
+        if os.name == 'nt':
+            try:
+                # Get owner
+                sd = win32security.GetFileSecurity(
+                    path, win32security.OWNER_SECURITY_INFORMATION)
+                owner_sid = sd.GetSecurityDescriptorOwner()
+                name, domain, type = win32security.LookupAccountSid(None, owner_sid)
+                result["owner"] = f"{domain}\\{name}"
+                
+                # Get file attributes
+                attrs = win32api.GetFileAttributes(path)
+                if attrs & win32con.FILE_ATTRIBUTE_READONLY:
+                    result["attributes"].append("Read-only")
+                if attrs & win32con.FILE_ATTRIBUTE_HIDDEN:
+                    result["attributes"].append("Hidden")
+                if attrs & win32con.FILE_ATTRIBUTE_SYSTEM:
+                    result["attributes"].append("System")
+                if attrs & win32con.FILE_ATTRIBUTE_ARCHIVE:
+                    result["attributes"].append("Archive")
+                if attrs & win32con.FILE_ATTRIBUTE_COMPRESSED:
+                    result["attributes"].append("Compressed")
+                if attrs & win32con.FILE_ATTRIBUTE_ENCRYPTED:
+                    result["attributes"].append("Encrypted")
+                    
+                # Check delete permission
+                try:
+                    # Try to get delete permission without actually deleting
+                    sd = win32security.GetFileSecurity(
+                        path, win32security.DELETE)
+                    result["basic"]["delete"] = True
+                except:
+                    result["basic"]["delete"] = False
+            except Exception as e:
+                result["error"] = f"Windows permission error: {str(e)}"
+        
+        return result
+        
+    except Exception as e:
+        return {"error": f"Permission check error: {str(e)}"}
 
 def get_permission_string(access_mask):
     perms = []
@@ -667,44 +1214,183 @@ def get_permission_string(access_mask):
     if access_mask & win32con.WRITE_OWNER: perms.append("Take Ownership")
     return ", ".join(perms) if perms else "No Access"
 
+def disk_health_check():
+    """
+    Perform a comprehensive disk health check
+    
+    Returns:
+        dict: Dictionary containing disk health information
+    """
+    results = {
+        "space_usage": {},
+        "performance": {},
+        "warnings": [],
+        "errors": []
+    }
+    
+    try:
+        # Check disk space
+        for partition in psutil.disk_partitions():
+            if 'fixed' in partition.opts:
+                try:
+                    usage = psutil.disk_usage(partition.mountpoint)
+                    results["space_usage"][partition.mountpoint] = {
+                        "total": usage.total,
+                        "used": usage.used,
+                        "free": usage.free,
+                        "percent_used": usage.percent
+                    }
+                    
+                    # Add warnings for low disk space
+                    if usage.percent > 90:
+                        results["warnings"].append(
+                            f"Low disk space on {partition.mountpoint}: {usage.percent}% used"
+                        )
+                except Exception as e:
+                    results["errors"].append(f"Error checking {partition.mountpoint}: {str(e)}")
+        
+        # Check disk performance (Windows only)
+        if os.name == 'nt':
+            try:
+                # Check disk status
+                status_output = subprocess.check_output(
+                    ["wmic", "diskdrive", "get", "status"], 
+                    universal_newlines=True
+                )
+                status_lines = status_output.strip().split('\n')[1:]
+                if any(status != "OK" for status in status_lines if status.strip()):
+                    results["errors"].append("Disk hardware issues detected")
+                results["performance"]["disk_status"] = "OK" if all(
+                    status == "OK" for status in status_lines if status.strip()
+                ) else "Issues detected"
+                
+                # Check fragmentation (simplified)
+                results["performance"]["fragmentation"] = "Unknown (run defrag for details)"
+                
+                # Simple disk speed test
+                try:
+                    # Write test
+                    test_file = os.path.join(os.environ.get('TEMP', '.'), 'disk_test.tmp')
+                    start_time = time.time()
+                    with open(test_file, 'wb') as f:
+                        f.write(os.urandom(50 * 1024 * 1024))  # 50MB test file
+                    write_time = time.time() - start_time
+                    write_speed = 50 / write_time  # MB/s
+                    
+                    # Read test
+                    start_time = time.time()
+                    with open(test_file, 'rb') as f:
+                        f.read()
+                    read_time = time.time() - start_time
+                    read_speed = 50 / read_time  # MB/s
+                    
+                    # Clean up
+                    os.remove(test_file)
+                    
+                    results["performance"]["write_speed"] = f"{write_speed:.1f} MB/s"
+                    results["performance"]["read_speed"] = f"{read_speed:.1f} MB/s"
+                    
+                    if write_speed < 10 or read_speed < 20:
+                        results["warnings"].append("Slow disk performance detected")
+                        
+                except Exception as e:
+                    results["warnings"].append(f"Could not test disk speed: {str(e)}")
+                    
+            except Exception as e:
+                results["warnings"].append(f"Could not check disk status: {str(e)}")
+        
+        return results
+        
+    except Exception as e:
+        results["errors"].append(f"Disk health check error: {str(e)}")
+        return results
+
 def clean_cache():
+    """
+    Clean temporary files and directories from system cache locations.
+    
+    Returns:
+        tuple: (int, list) Number of items cleaned and list of errors
+    """
     cleaned = 0
     errors = []
-    paths_to_clean = list(set([
-        os.environ.get('TEMP'),
-        os.environ.get('TMP'),
-        os.path.join(os.environ.get('LOCALAPPDATA'), 'Temp'),
-        os.path.join(os.environ.get('WINDIR'), 'Temp')
-    ]))
+    
+    # Define paths to clean based on OS
+    if os.name == 'nt':  # Windows
+        paths_to_clean = list(filter(None, [
+            os.environ.get('TEMP'),
+            os.environ.get('TMP'),
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Temp'),
+            os.path.join(os.environ.get('WINDIR', ''), 'Temp')
+        ]))
+    else:  # Unix/Linux/Mac
+        paths_to_clean = [
+            '/tmp',
+            os.path.expanduser('~/.cache')
+        ]
+    
+    # Safe file extensions that should not be deleted
+    protected_exts = ['.dll', '.pyd', '.exe', '.so', '.dylib']
+    
+    # Safe directory patterns that should be skipped
+    protected_dirs = ['_MEI', 'pywin32_system32', 'chrome-remote-desktop']
     
     for path in paths_to_clean:
         if not path or not os.path.exists(path):
             continue
             
         print(f"{Fore.YELLOW}Cleaning {path}...")
-        for root, dirs, files in os.walk(path, topdown=False):
-            if any(skip in root for skip in ['_MEI', 'pywin32_system32']):
-                continue
-                
-            for name in files:
-                try:
-                    filepath = os.path.join(root, name)
-                    if not any(skip in filepath for skip in ['.dll', '.pyd', '.exe']):
-                        os.unlink(filepath)
-                        cleaned += 1
-                except Exception as e:
-                    pass
+        
+        try:
+            # Use tqdm for progress if there are many files
+            file_count = sum([len(files) for _, _, files in os.walk(path)])
+            if file_count > 100:
+                print(f"Found {file_count} files to process")
             
-            for name in dirs:
-                try:
-                    dirpath = os.path.join(root, name)
-                    if not os.listdir(dirpath):
-                        os.rmdir(dirpath)
-                        cleaned += 1
-                except Exception:
-                    pass
+            for root, dirs, files in os.walk(path, topdown=False):
+                # Skip protected directories
+                if any(skip in root for skip in protected_dirs):
+                    continue
+                    
+                # Remove files first
+                for name in files:
+                    try:
+                        filepath = os.path.join(root, name)
+                        file_ext = os.path.splitext(filepath)[1].lower()
+                        
+                        # Skip protected file types
+                        if file_ext in protected_exts:
+                            continue
+                            
+                        # Skip files in use
+                        if os.path.exists(filepath):
+                            try:
+                                # Try to open the file to see if it's locked
+                                with open(filepath, 'a'):
+                                    pass
+                                # If we get here, file is not locked
+                                os.unlink(filepath)
+                                cleaned += 1
+                            except (PermissionError, OSError):
+                                # File is in use or protected
+                                continue
+                    except Exception as e:
+                        errors.append(f"Error deleting {name}: {str(e)}")
+                
+                # Then try to remove empty directories
+                for name in dirs:
+                    try:
+                        dirpath = os.path.join(root, name)
+                        if os.path.exists(dirpath) and not os.listdir(dirpath):
+                            os.rmdir(dirpath)
+                            cleaned += 1
+                    except Exception as e:
+                        errors.append(f"Error removing directory {name}: {str(e)}")
+        
+        except Exception as e:
+            errors.append(f"Error processing {path}: {str(e)}")
     
-    return cleaned, []
+    return cleaned, errors
 
 def monitor_directory(directory):
     class FileHandler(FileSystemEventHandler):
