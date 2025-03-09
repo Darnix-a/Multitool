@@ -12,3 +12,5 @@ pillow
 wmi
 pyperclip
 winshell
+requests
+dnspython

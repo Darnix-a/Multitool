@@ -25,6 +25,8 @@ import subprocess
 import mimetypes
 from typing import Dict, List, Tuple, Optional, Union, Any
 import concurrent.futures
+import socket  # Add if not already present
+import requests  # Add this import
 
 
 # Third-party imports
@@ -52,7 +54,7 @@ except ImportError:
 init(autoreset=True)
 
 # Global constants
-PROGRAM_NAME = "Multitool v3.3"
+PROGRAM_NAME = "Multitool v3.4"
 CHUNK_SIZE = 64 * 1024  # 64KB chunks for file operations
 MAX_WORKERS = 4  # Maximum number of worker threads for parallel operations
 
@@ -2150,6 +2152,234 @@ def display_exit_screen():
     
     time.sleep(1.5)
 
+def network_scan():
+    """Scan local network for active devices"""
+    try:
+        import socket
+        import ipaddress
+        
+        # Get local IP address
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        
+        # Get network address
+        network = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
+        
+        print(f"{Fore.CYAN}Scanning local network ({network})...")
+        print(f"{Fore.YELLOW}This may take a few minutes...")
+        
+        active_hosts = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+            futures = []
+            for ip in network.hosts():
+                futures.append(executor.submit(subprocess.call, ["ping", "-n", "1", "-w", "200", str(ip)], 
+                                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                
+            for ip, future in zip(network.hosts(), futures):
+                if future.result() == 0:
+                    try:
+                        hostname = socket.gethostbyaddr(str(ip))[0]
+                    except:
+                        hostname = "Unknown"
+                    active_hosts.append((str(ip), hostname))
+        
+        print(f"\n{Fore.GREEN}Found {len(active_hosts)} active devices:")
+        for ip, hostname in active_hosts:
+            print(f"{Fore.WHITE}{ip:15} {Fore.YELLOW}{hostname}")
+            
+    except Exception as e:
+        print(f"{Fore.RED}Error scanning network: {str(e)}")
+
+def port_scanner():
+    """Scan ports on a target IP address"""
+    try:
+        target = input(f"{Fore.YELLOW}Enter IP address to scan: {Fore.WHITE}")
+        print(f"{Fore.YELLOW}Select scan type:")
+        print(f"{Fore.WHITE}1. Quick scan (common ports)")
+        print(f"{Fore.WHITE}2. Full scan (1-1024)")
+        print(f"{Fore.WHITE}3. Custom port range")
+        
+        choice = input(f"\n{Fore.GREEN}Choose option (1-3): {Fore.WHITE}")
+        
+        if choice == "1":
+            ports = [21, 22, 23, 25, 53, 80, 110, 139, 443, 445, 3306, 3389]
+        elif choice == "2":
+            ports = range(1, 1025)
+        elif choice == "3":
+            start = int(input(f"{Fore.YELLOW}Start port: {Fore.WHITE}"))
+            end = int(input(f"{Fore.YELLOW}End port: {Fore.WHITE}"))
+            ports = range(start, end + 1)
+        else:
+            return
+            
+        open_ports = []
+        print(f"\n{Fore.CYAN}Scanning ports on {target}...")
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+            futures = []
+            for port in ports:
+                futures.append(executor.submit(try_connect, target, port))
+                
+            for port, future in zip(ports, futures):
+                if future.result():
+                    open_ports.append(port)
+                    print(f"{Fore.GREEN}Port {port} is open!")
+        
+        if not open_ports:
+            print(f"{Fore.YELLOW}No open ports found.")
+            
+    except Exception as e:
+        print(f"{Fore.RED}Error scanning ports: {str(e)}")
+
+def try_connect(ip, port):
+    """Helper function to test if a port is open"""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            return s.connect_ex((ip, port)) == 0
+    except:
+        return False
+
+def wifi_info():
+    """Display information about WiFi networks"""
+    try:
+        if os.name != 'nt':
+            print(f"{Fore.RED}This feature is only available on Windows.")
+            return
+            
+        print(f"{Fore.CYAN}Scanning for WiFi networks...")
+        try:
+            # Add error handling and check if WiFi adapter is present
+            subprocess.check_output(["netsh", "wlan", "show", "interfaces"], encoding='utf-8')
+            output = subprocess.check_output(["netsh", "wlan", "show", "networks"], encoding='utf-8')
+        except subprocess.CalledProcessError:
+            print(f"{Fore.RED}No wireless interface found or WiFi is turned off.")
+            return
+        
+        networks = []
+        current_network = {}
+        
+        for line in output.split('\n'):
+            line = line.strip()
+            if line.startswith('SSID'):
+                if current_network:
+                    networks.append(current_network)
+                current_network = {'ssid': line.split(':')[1].strip()}
+            elif line.startswith('Network type'):
+                current_network['type'] = line.split(':')[1].strip()
+            elif line.startswith('Authentication'):
+                current_network['auth'] = line.split(':')[1].strip()
+            elif line.startswith('Signal'):
+                current_network['signal'] = line.split(':')[1].strip()
+                
+        if current_network:
+            networks.append(current_network)
+            
+        print(f"\n{Fore.GREEN}Found {len(networks)} networks:")
+        for net in networks:
+            print(f"\n{Fore.YELLOW}SSID: {Fore.WHITE}{net['ssid']}")
+            print(f"{Fore.YELLOW}Type: {Fore.WHITE}{net.get('type', 'Unknown')}")
+            print(f"{Fore.YELLOW}Security: {Fore.WHITE}{net.get('auth', 'Unknown')}")
+            print(f"{Fore.YELLOW}Signal: {Fore.WHITE}{net.get('signal', 'Unknown')}")
+            
+        # Show current connection
+        print(f"\n{Fore.CYAN}Current Connection:")
+        output = subprocess.check_output(["netsh", "wlan", "show", "interfaces"], encoding='utf-8')
+        print(f"{Fore.WHITE}{output}")
+        
+    except Exception as e:
+        print(f"{Fore.RED}Error getting WiFi information: {str(e)}")
+
+def speed_test():
+    """Perform an internet speed test"""
+    try:
+        print(f"{Fore.YELLOW}Testing internet speed...")
+        print(f"{Fore.CYAN}This may take a minute...")
+        
+        # Test download speed
+        start_time = time.time()
+        response = requests.get("http://speedtest.ftp.otenet.gr/files/test100k.db", stream=True)
+        downloaded = 0
+        
+        for data in response.iter_content(chunk_size=4096):
+            downloaded += len(data)
+        
+        duration = time.time() - start_time
+        download_speed = (downloaded * 8) / (1024 * 1024 * duration)  # Mbps
+        
+        # Test upload speed using a small POST request
+        data = b'X' * 100000  # 100KB of data
+        start_time = time.time()
+        response = requests.post("https://httpbin.org/post", data=data)
+        duration = time.time() - start_time
+        upload_speed = (len(data) * 8) / (1024 * 1024 * duration)  # Mbps
+        
+        # Test ping
+        start_time = time.time()
+        requests.get("https://www.google.com")
+        ping = (time.time() - start_time) * 1000  # ms
+        
+        print(f"\n{Fore.GREEN}Speed Test Results:")
+        print(f"{Fore.YELLOW}Download: {Fore.WHITE}{download_speed:.1f} Mbps")
+        print(f"{Fore.YELLOW}Upload: {Fore.WHITE}{upload_speed:.1f} Mbps")
+        print(f"{Fore.YELLOW}Ping: {Fore.WHITE}{ping:.0f} ms")
+        
+    except Exception as e:
+        print(f"{Fore.RED}Error testing speed: {str(e)}")
+
+def dns_lookup():
+    """Perform DNS lookups and reverse lookups"""
+    try:
+        while True:
+            print(f"\n{Fore.CYAN}DNS Lookup Tools")
+            print(f"{Fore.YELLOW}1. DNS Lookup (hostname to IP)")
+            print(f"{Fore.YELLOW}2. Reverse DNS Lookup (IP to hostname)")
+            print(f"{Fore.YELLOW}3. Get DNS Records")
+            print(f"{Fore.YELLOW}4. Exit")
+            
+            choice = input(f"\n{Fore.GREEN}Choose option (1-4): {Fore.WHITE}")
+            
+            if choice == "1":
+                hostname = input(f"{Fore.YELLOW}Enter hostname: {Fore.WHITE}")
+                try:
+                    ip = socket.gethostbyname(hostname)
+                    print(f"{Fore.GREEN}IP Address: {Fore.WHITE}{ip}")
+                except:
+                    print(f"{Fore.RED}Could not resolve hostname")
+                    
+            elif choice == "2":
+                ip = input(f"{Fore.YELLOW}Enter IP address: {Fore.WHITE}")
+                try:
+                    hostname = socket.gethostbyaddr(ip)[0]
+                    print(f"{Fore.GREEN}Hostname: {Fore.WHITE}{hostname}")
+                except:
+                    print(f"{Fore.RED}Could not perform reverse lookup")
+                    
+            elif choice == "3":
+                domain = input(f"{Fore.YELLOW}Enter domain: {Fore.WHITE}")
+                try:
+                    import dns.resolver
+                    record_types = ['A', 'AAAA', 'MX', 'NS', 'TXT', 'SOA']
+                    
+                    for record_type in record_types:
+                        try:
+                            answers = dns.resolver.resolve(domain, record_type)
+                            print(f"\n{Fore.GREEN}{record_type} Records:")
+                            for rdata in answers:
+                                print(f"{Fore.WHITE}{rdata}")
+                        except:
+                            continue
+                except:
+                    print(f"{Fore.RED}Error getting DNS records")
+                    
+            elif choice == "4":
+                break
+                
+    except Exception as e:
+        print(f"{Fore.RED}Error performing DNS lookup: {str(e)}")
+
 def main_menu():
     while True:
         clear_screen()
@@ -2199,8 +2429,16 @@ def main_menu():
             "Corrupt File"
         ]
         
+        networking_options = [
+            "Network Usage",  # Moved from System Monitoring
+            "Network Scanner",
+            "Port Scanner",
+            "WiFi Information",
+            "Speed Test",
+            "DNS Tools"
+        ]
+        
         system_monitoring_options = [
-            "Network Usage",
             "System Resources",
             "Running Services"
         ]
@@ -2217,19 +2455,25 @@ def main_menu():
             ("Organization", organize_options, 8),    
             ("System Tools", system_options, 13),   
             ("Security", security_options, 17),    
-            ("System Monitoring", system_monitoring_options, 23),
-            ("Advanced Tools", advanced_options, 26) 
+            ("Networking Tools", networking_options, 22),  # Updated from 23
+            ("System Monitoring", system_monitoring_options, 28), # Updated from 29  
+            ("Advanced Tools", advanced_options, 31)  # Updated from 32
         ]
         
         for title, options, start_num in menu_sections:
             display_menu_section(title, options, start_num)
             print(f"{Fore.CYAN}╠═{'═' * (width-4)}═╣")
         
-        print(f"{Fore.CYAN}║{Fore.RED} 30 {Fore.WHITE}Exit Program{' ' * (width-18)}{Fore.CYAN}║")
+        print(f"{Fore.CYAN}║ {Fore.RED}Enter '35' to exit{' ' * (width-20)}{Fore.CYAN}║")
         print(f"{Fore.CYAN}╚═{'═' * (width-4)}═╝")
 
         try:
-            choice = input(f"\n{Fore.GREEN}Enter your choice (1-30): {Fore.WHITE}")
+            choice = input(f"\n{Fore.GREEN}Enter your choice (1-35): {Fore.WHITE}")
+
+            if choice.lower() == '35':
+                display_exit_screen()
+                break
+                
             clear_screen()
             
             if choice == '1':
@@ -2464,20 +2708,27 @@ def main_menu():
             elif choice == '23':
                 monitor_network()
             elif choice == '24':
-                system_resources()
+                network_scan()
             elif choice == '25':
+                port_scanner()
+            elif choice == '26':
+                wifi_info()
+            elif choice == '27':
+                speed_test()
+            elif choice == '28':
+                dns_lookup()
+            elif choice == '29':
+                system_resources()
+            elif choice == '30':
                 monitor_services()
-            elif choice == '26':           
+            elif choice == '31':           
                 manage_startup()
-            elif choice == '27':           
+            elif choice == '32':           
                 system_restore()
-            elif choice == '28':      
+            elif choice == '33':      
                 advanced_search()
-            elif choice == '29':         
+            elif choice == '34':         
                 process_explorer()
-            elif choice == '30':  
-                display_exit_screen()
-                break
 
             if choice != '1':
                 input(f"\n{Fore.CYAN}Press Enter to continue...{Fore.WHITE}")
