@@ -2243,70 +2243,358 @@ def try_connect(ip, port):
         return False
 
 def wifi_info():
-    """Display information about network connections"""
+    """Display information about WiFi networks and Ethernet connections across different operating systems"""
     try:
-        if os.name != 'nt':
-            print(f"{Fore.RED}This feature is only available on Windows.")
-            return
-            
-        print(f"{Fore.CYAN}Scanning network interfaces...")
+        print(f"{Fore.CYAN}Checking network connections...")
+        ethernet_found = False
+        wifi_found = False
         
-        # Get network adapter info
-        print(f"\n{Fore.CYAN}Network Adapters:")
-        adapters = psutil.net_if_addrs()
-        for adapter, addresses in adapters.items():
-            print(f"\n{Fore.YELLOW}{adapter}:")
-            for addr in addresses:
-                if addr.family == socket.AF_INET:
-                    print(f"{Fore.WHITE}IP Address: {addr.address}")
-                    print(f"{Fore.WHITE}Netmask: {addr.netmask}")
-                elif addr.family == socket.AF_INET6:
-                    print(f"{Fore.WHITE}IPv6 Address: {addr.address}")
-                elif addr.family == psutil.AF_LINK:
-                    print(f"{Fore.WHITE}MAC Address: {addr.address}")
-                    
-        # Get adapter status
-        stats = psutil.net_if_stats()
-        for adapter, stat in stats.items():
-            print(f"\n{Fore.YELLOW}{adapter} Status:")
-            print(f"{Fore.WHITE}Speed: {stat.speed} Mbps")
-            print(f"{Fore.WHITE}Status: {'Up' if stat.isup else 'Down'}")
-            print(f"{Fore.WHITE}MTU: {stat.mtu}")
-
-        # Get WiFi networks if available
-        try:
-            subprocess.check_output(["netsh", "wlan", "show", "interfaces"], encoding='utf-8')
-            print(f"\n{Fore.CYAN}WiFi Networks:")
-            output = subprocess.check_output(["netsh", "wlan", "show", "networks"], encoding='utf-8')
-            
-            networks = []
-            current_network = {}
-            
-            for line in output.split('\n'):
-                line = line.strip()
-                if line.startswith('SSID'):
-                    if current_network:
-                        networks.append(current_network)
-                    current_network = {'ssid': line.split(':')[1].strip()}
-                elif line.startswith('Network type'):
-                    current_network['type'] = line.split(':')[1].strip()
-                elif line.startswith('Authentication'):
-                    current_network['auth'] = line.split(':')[1].strip()
-                elif line.startswith('Signal'):
-                    current_network['signal'] = line.split(':')[1].strip()
-                    
-            if current_network:
-                networks.append(current_network)
+        # Determine OS and use appropriate commands
+        if os.name == 'nt':  # Windows
+            # Check for Ethernet connections first
+            try:
+                # Get network adapter information
+                output = subprocess.check_output(["ipconfig", "/all"], encoding='utf-8')
                 
-            for net in networks:
-                print(f"\n{Fore.YELLOW}SSID: {Fore.WHITE}{net['ssid']}")
-                print(f"{Fore.YELLOW}Type: {Fore.WHITE}{net.get('type', 'Unknown')}")
-                print(f"{Fore.YELLOW}Security: {Fore.WHITE}{net.get('auth', 'Unknown')}")
-                print(f"{Fore.YELLOW}Signal: {Fore.WHITE}{net.get('signal', 'Unknown')}")
+                # Parse the output to find Ethernet adapters
+                ethernet_adapters = []
+                current_adapter = None
                 
-        except subprocess.CalledProcessError:
-            print(f"{Fore.YELLOW}No wireless interface available")
+                for line in output.split('\n'):
+                    line = line.strip()
+                    
+                    # New adapter section
+                    if line.endswith(':') and not line.startswith(' '):
+                        if current_adapter and 'Ethernet' in current_adapter['name']:
+                            ethernet_adapters.append(current_adapter)
+                        current_adapter = {'name': line[:-1], 'details': {}}
+                    
+                    # Adapter details
+                    elif current_adapter and ':' in line:
+                        key, value = line.split(':', 1)
+                        current_adapter['details'][key.strip()] = value.strip()
+                
+                # Add the last adapter if it's Ethernet
+                if current_adapter and 'Ethernet' in current_adapter['name']:
+                    ethernet_adapters.append(current_adapter)
+                
+                # Display Ethernet information
+                if ethernet_adapters:
+                    ethernet_found = True
+                    print(f"\n{Fore.GREEN}Found {len(ethernet_adapters)} Ethernet connections:")
+                    
+                    for adapter in ethernet_adapters:
+                        print(f"\n{Fore.YELLOW}Adapter: {Fore.WHITE}{adapter['name']}")
+                        
+                        # Show important details
+                        important_keys = [
+                            'Physical Address', 
+                            'IPv4 Address', 
+                            'Subnet Mask',
+                            'Default Gateway',
+                            'DHCP Server',
+                            'Connection-specific DNS Suffix',
+                            'Link Speed'
+                        ]
+                        
+                        for key in important_keys:
+                            for detail_key, value in adapter['details'].items():
+                                if key in detail_key:
+                                    print(f"{Fore.YELLOW}{detail_key}: {Fore.WHITE}{value}")
+                        
+                        # Check if connected
+                        if 'Media State' in adapter['details'] and 'disconnected' in adapter['details']['Media State']:
+                            print(f"{Fore.RED}Status: Disconnected")
+                        elif 'IPv4 Address' in adapter['details'].keys():
+                            print(f"{Fore.GREEN}Status: Connected")
+                        else:
+                            print(f"{Fore.YELLOW}Status: Unknown")
             
+            except subprocess.CalledProcessError:
+                print(f"{Fore.RED}Error retrieving network adapter information.")
+            
+            # Now check for WiFi networks
+            print(f"\n{Fore.CYAN}Scanning for WiFi networks...")
+            try:
+                # Add error handling and check if WiFi adapter is present
+                subprocess.check_output(["netsh", "wlan", "show", "interfaces"], encoding='utf-8')
+                output = subprocess.check_output(["netsh", "wlan", "show", "networks"], encoding='utf-8')
+                
+                networks = []
+                current_network = {}
+                
+                for line in output.split('\n'):
+                    line = line.strip()
+                    if line.startswith('SSID'):
+                        if current_network:
+                            networks.append(current_network)
+                        current_network = {'ssid': line.split(':')[1].strip()}
+                    elif line.startswith('Network type'):
+                        current_network['type'] = line.split(':')[1].strip()
+                    elif line.startswith('Authentication'):
+                        current_network['auth'] = line.split(':')[1].strip()
+                    elif line.startswith('Signal'):
+                        current_network['signal'] = line.split(':')[1].strip()
+                        
+                if current_network:
+                    networks.append(current_network)
+                
+                if networks:
+                    wifi_found = True
+                    print(f"\n{Fore.GREEN}Found {len(networks)} WiFi networks:")
+                    for net in networks:
+                        print(f"\n{Fore.YELLOW}SSID: {Fore.WHITE}{net['ssid']}")
+                        print(f"{Fore.YELLOW}Type: {Fore.WHITE}{net.get('type', 'Unknown')}")
+                        print(f"{Fore.YELLOW}Security: {Fore.WHITE}{net.get('auth', 'Unknown')}")
+                        print(f"{Fore.YELLOW}Signal: {Fore.WHITE}{net.get('signal', 'Unknown')}")
+                    
+                    # Show current WiFi connection
+                    print(f"\n{Fore.CYAN}Current WiFi Connection:")
+                    output = subprocess.check_output(["netsh", "wlan", "show", "interfaces"], encoding='utf-8')
+                    print(f"{Fore.WHITE}{output}")
+                
+            except subprocess.CalledProcessError:
+                if not ethernet_found:
+                    print(f"{Fore.RED}No wireless interface found or WiFi is turned off.")
+                else:
+                    print(f"{Fore.YELLOW}No wireless interface found or WiFi is turned off.")
+        
+        elif sys.platform.startswith('linux'):  # Linux
+            # Check for network interfaces using 'ip' command
+            try:
+                # Get all network interfaces
+                output = subprocess.check_output(["ip", "addr", "show"], encoding='utf-8')
+                
+                # Parse the output to find network interfaces
+                interfaces = []
+                current_interface = None
+                
+                for line in output.split('\n'):
+                    line = line.strip()
+                    
+                    # New interface section
+                    if line.startswith(tuple(str(i) + ':' for i in range(10))):
+                        if current_interface:
+                            interfaces.append(current_interface)
+                        
+                        parts = line.split(':', 2)
+                        if len(parts) >= 2:
+                            iface_name = parts[1].strip()
+                            current_interface = {
+                                'name': iface_name,
+                                'type': 'Ethernet' if not iface_name.startswith('wl') else 'WiFi',
+                                'details': {}
+                            }
+                    
+                    # Interface details
+                    elif current_interface:
+                        if 'inet ' in line:  # IPv4 address
+                            current_interface['details']['IPv4 Address'] = line.split('inet ')[1].split('/')[0]
+                        elif 'link/ether ' in line:  # MAC address
+                            current_interface['details']['MAC Address'] = line.split('link/ether ')[1].split(' ')[0]
+                
+                # Add the last interface
+                if current_interface:
+                    interfaces.append(current_interface)
+                
+                # Display Ethernet information
+                ethernet_interfaces = [iface for iface in interfaces if iface['type'] == 'Ethernet']
+                if ethernet_interfaces:
+                    ethernet_found = True
+                    print(f"\n{Fore.GREEN}Found {len(ethernet_interfaces)} Ethernet connections:")
+                    
+                    for iface in ethernet_interfaces:
+                        print(f"\n{Fore.YELLOW}Interface: {Fore.WHITE}{iface['name']}")
+                        
+                        for key, value in iface['details'].items():
+                            print(f"{Fore.YELLOW}{key}: {Fore.WHITE}{value}")
+                        
+                        # Check if connected
+                        if 'IPv4 Address' in iface['details']:
+                            print(f"{Fore.GREEN}Status: Connected")
+                        else:
+                            print(f"{Fore.RED}Status: Disconnected")
+                
+                # Display WiFi information
+                wifi_interfaces = [iface for iface in interfaces if iface['type'] == 'WiFi']
+                if wifi_interfaces:
+                    wifi_found = True
+                    print(f"\n{Fore.GREEN}Found {len(wifi_interfaces)} WiFi connections:")
+                    
+                    for iface in wifi_interfaces:
+                        print(f"\n{Fore.YELLOW}Interface: {Fore.WHITE}{iface['name']}")
+                        
+                        for key, value in iface['details'].items():
+                            print(f"{Fore.YELLOW}{key}: {Fore.WHITE}{value}")
+                        
+                        # Check if connected
+                        if 'IPv4 Address' in iface['details']:
+                            print(f"{Fore.GREEN}Status: Connected")
+                        else:
+                            print(f"{Fore.RED}Status: Disconnected")
+                
+                # Try to get WiFi networks using 'iwlist' command
+                try:
+                    for iface in wifi_interfaces:
+                        output = subprocess.check_output(["iwlist", iface['name'], "scan"], encoding='utf-8')
+                        
+                        networks = []
+                        current_network = None
+                        
+                        for line in output.split('\n'):
+                            line = line.strip()
+                            
+                            if 'ESSID:' in line:
+                                if current_network:
+                                    networks.append(current_network)
+                                
+                                essid = line.split('ESSID:"')[1].split('"')[0]
+                                current_network = {'ssid': essid, 'details': {}}
+                            
+                            elif current_network:
+                                if 'Quality=' in line:
+                                    quality = line.split('Quality=')[1].split(' ')[0]
+                                    current_network['details']['Signal'] = quality
+                                elif 'Encryption key:' in line:
+                                    encryption = line.split('Encryption key:')[1]
+                                    current_network['details']['Encryption'] = encryption
+                        
+                        # Add the last network
+                        if current_network:
+                            networks.append(current_network)
+                        
+                        if networks:
+                            print(f"\n{Fore.GREEN}Found {len(networks)} WiFi networks on {iface['name']}:")
+                            
+                            for net in networks:
+                                print(f"\n{Fore.YELLOW}SSID: {Fore.WHITE}{net['ssid']}")
+                                
+                                for key, value in net['details'].items():
+                                    print(f"{Fore.YELLOW}{key}: {Fore.WHITE}{value}")
+                
+                except subprocess.CalledProcessError:
+                    print(f"{Fore.YELLOW}Could not scan for WiFi networks. Try running with sudo.")
+            
+            except subprocess.CalledProcessError:
+                print(f"{Fore.RED}Error retrieving network information.")
+        
+        elif sys.platform == 'darwin':  # macOS
+            # Check for network interfaces using 'ifconfig' command
+            try:
+                # Get all network interfaces
+                output = subprocess.check_output(["ifconfig"], encoding='utf-8')
+                
+                # Parse the output to find network interfaces
+                interfaces = []
+                current_interface = None
+                
+                for line in output.split('\n'):
+                    line = line.strip()
+                    
+                    # New interface section
+                    if line and not line.startswith('\t') and not line.startswith(' '):
+                        if current_interface:
+                            interfaces.append(current_interface)
+                        
+                        iface_name = line.split(':')[0]
+                        current_interface = {
+                            'name': iface_name,
+                            'type': 'Ethernet' if iface_name.startswith('en') else 'WiFi' if iface_name.startswith('wl') else 'Other',
+                            'details': {}
+                        }
+                    
+                    # Interface details
+                    elif current_interface:
+                        if 'inet ' in line:  # IPv4 address
+                            current_interface['details']['IPv4 Address'] = line.split('inet ')[1].split(' ')[0]
+                        elif 'ether ' in line:  # MAC address
+                            current_interface['details']['MAC Address'] = line.split('ether ')[1]
+                
+                # Add the last interface
+                if current_interface:
+                    interfaces.append(current_interface)
+                
+                # Display Ethernet information
+                ethernet_interfaces = [iface for iface in interfaces if iface['type'] == 'Ethernet']
+                if ethernet_interfaces:
+                    ethernet_found = True
+                    print(f"\n{Fore.GREEN}Found {len(ethernet_interfaces)} Ethernet connections:")
+                    
+                    for iface in ethernet_interfaces:
+                        print(f"\n{Fore.YELLOW}Interface: {Fore.WHITE}{iface['name']}")
+                        
+                        for key, value in iface['details'].items():
+                            print(f"{Fore.YELLOW}{key}: {Fore.WHITE}{value}")
+                        
+                        # Check if connected
+                        if 'IPv4 Address' in iface['details']:
+                            print(f"{Fore.GREEN}Status: Connected")
+                        else:
+                            print(f"{Fore.RED}Status: Disconnected")
+                
+                # Display WiFi information
+                wifi_interfaces = [iface for iface in interfaces if iface['type'] == 'WiFi']
+                if wifi_interfaces:
+                    wifi_found = True
+                    print(f"\n{Fore.GREEN}Found {len(wifi_interfaces)} WiFi connections:")
+                    
+                    for iface in wifi_interfaces:
+                        print(f"\n{Fore.YELLOW}Interface: {Fore.WHITE}{iface['name']}")
+                        
+                        for key, value in iface['details'].items():
+                            print(f"{Fore.YELLOW}{key}: {Fore.WHITE}{value}")
+                        
+                        # Check if connected
+                        if 'IPv4 Address' in iface['details']:
+                            print(f"{Fore.GREEN}Status: Connected")
+                        else:
+                            print(f"{Fore.RED}Status: Disconnected")
+                
+                # Try to get WiFi networks using 'airport' command
+                try:
+                    airport_path = "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
+                    output = subprocess.check_output([airport_path, "-s"], encoding='utf-8')
+                    
+                    lines = output.split('\n')
+                    if len(lines) > 1:  # Skip header line
+                        networks = []
+                        
+                        for line in lines[1:]:
+                            if not line.strip():
+                                continue
+                                
+                            parts = line.split()
+                            if len(parts) >= 5:
+                                ssid = parts[0]
+                                signal = parts[2]
+                                security = parts[6] if len(parts) > 6 else "Unknown"
+                                
+                                networks.append({
+                                    'ssid': ssid,
+                                    'signal': signal,
+                                    'security': security
+                                })
+                        
+                        if networks:
+                            print(f"\n{Fore.GREEN}Found {len(networks)} WiFi networks:")
+                            
+                            for net in networks:
+                                print(f"\n{Fore.YELLOW}SSID: {Fore.WHITE}{net['ssid']}")
+                                print(f"{Fore.YELLOW}Signal: {Fore.WHITE}{net['signal']}")
+                                print(f"{Fore.YELLOW}Security: {Fore.WHITE}{net['security']}")
+                
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    print(f"{Fore.YELLOW}Could not scan for WiFi networks.")
+            
+            except subprocess.CalledProcessError:
+                print(f"{Fore.RED}Error retrieving network information.")
+        
+        else:
+            print(f"{Fore.RED}Unsupported operating system: {sys.platform}")
+        
+        if not ethernet_found and not wifi_found:
+            print(f"{Fore.RED}No network interfaces found.")
+        
     except Exception as e:
         print(f"{Fore.RED}Error getting network information: {str(e)}")
 
