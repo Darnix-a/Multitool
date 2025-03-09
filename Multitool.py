@@ -54,7 +54,7 @@ except ImportError:
 init(autoreset=True)
 
 # Global constants
-PROGRAM_NAME = "Multitool v3.4"
+PROGRAM_NAME = "Multitool v3.4.1"
 CHUNK_SIZE = 64 * 1024  # 64KB chunks for file operations
 MAX_WORKERS = 4  # Maximum number of worker threads for parallel operations
 
@@ -2243,54 +2243,72 @@ def try_connect(ip, port):
         return False
 
 def wifi_info():
-    """Display information about WiFi networks"""
+    """Display information about network connections"""
     try:
         if os.name != 'nt':
             print(f"{Fore.RED}This feature is only available on Windows.")
             return
             
-        print(f"{Fore.CYAN}Scanning for WiFi networks...")
+        print(f"{Fore.CYAN}Scanning network interfaces...")
+        
+        # Get network adapter info
+        print(f"\n{Fore.CYAN}Network Adapters:")
+        adapters = psutil.net_if_addrs()
+        for adapter, addresses in adapters.items():
+            print(f"\n{Fore.YELLOW}{adapter}:")
+            for addr in addresses:
+                if addr.family == socket.AF_INET:
+                    print(f"{Fore.WHITE}IP Address: {addr.address}")
+                    print(f"{Fore.WHITE}Netmask: {addr.netmask}")
+                elif addr.family == socket.AF_INET6:
+                    print(f"{Fore.WHITE}IPv6 Address: {addr.address}")
+                elif addr.family == psutil.AF_LINK:
+                    print(f"{Fore.WHITE}MAC Address: {addr.address}")
+                    
+        # Get adapter status
+        stats = psutil.net_if_stats()
+        for adapter, stat in stats.items():
+            print(f"\n{Fore.YELLOW}{adapter} Status:")
+            print(f"{Fore.WHITE}Speed: {stat.speed} Mbps")
+            print(f"{Fore.WHITE}Status: {'Up' if stat.isup else 'Down'}")
+            print(f"{Fore.WHITE}MTU: {stat.mtu}")
+
+        # Get WiFi networks if available
         try:
-            # Add error handling and check if WiFi adapter is present
             subprocess.check_output(["netsh", "wlan", "show", "interfaces"], encoding='utf-8')
+            print(f"\n{Fore.CYAN}WiFi Networks:")
             output = subprocess.check_output(["netsh", "wlan", "show", "networks"], encoding='utf-8')
-        except subprocess.CalledProcessError:
-            print(f"{Fore.RED}No wireless interface found or WiFi is turned off.")
-            return
-        
-        networks = []
-        current_network = {}
-        
-        for line in output.split('\n'):
-            line = line.strip()
-            if line.startswith('SSID'):
-                if current_network:
-                    networks.append(current_network)
-                current_network = {'ssid': line.split(':')[1].strip()}
-            elif line.startswith('Network type'):
-                current_network['type'] = line.split(':')[1].strip()
-            elif line.startswith('Authentication'):
-                current_network['auth'] = line.split(':')[1].strip()
-            elif line.startswith('Signal'):
-                current_network['signal'] = line.split(':')[1].strip()
+            
+            networks = []
+            current_network = {}
+            
+            for line in output.split('\n'):
+                line = line.strip()
+                if line.startswith('SSID'):
+                    if current_network:
+                        networks.append(current_network)
+                    current_network = {'ssid': line.split(':')[1].strip()}
+                elif line.startswith('Network type'):
+                    current_network['type'] = line.split(':')[1].strip()
+                elif line.startswith('Authentication'):
+                    current_network['auth'] = line.split(':')[1].strip()
+                elif line.startswith('Signal'):
+                    current_network['signal'] = line.split(':')[1].strip()
+                    
+            if current_network:
+                networks.append(current_network)
                 
-        if current_network:
-            networks.append(current_network)
+            for net in networks:
+                print(f"\n{Fore.YELLOW}SSID: {Fore.WHITE}{net['ssid']}")
+                print(f"{Fore.YELLOW}Type: {Fore.WHITE}{net.get('type', 'Unknown')}")
+                print(f"{Fore.YELLOW}Security: {Fore.WHITE}{net.get('auth', 'Unknown')}")
+                print(f"{Fore.YELLOW}Signal: {Fore.WHITE}{net.get('signal', 'Unknown')}")
+                
+        except subprocess.CalledProcessError:
+            print(f"{Fore.YELLOW}No wireless interface available")
             
-        print(f"\n{Fore.GREEN}Found {len(networks)} networks:")
-        for net in networks:
-            print(f"\n{Fore.YELLOW}SSID: {Fore.WHITE}{net['ssid']}")
-            print(f"{Fore.YELLOW}Type: {Fore.WHITE}{net.get('type', 'Unknown')}")
-            print(f"{Fore.YELLOW}Security: {Fore.WHITE}{net.get('auth', 'Unknown')}")
-            print(f"{Fore.YELLOW}Signal: {Fore.WHITE}{net.get('signal', 'Unknown')}")
-            
-        # Show current connection
-        print(f"\n{Fore.CYAN}Current Connection:")
-        output = subprocess.check_output(["netsh", "wlan", "show", "interfaces"], encoding='utf-8')
-        print(f"{Fore.WHITE}{output}")
-        
     except Exception as e:
-        print(f"{Fore.RED}Error getting WiFi information: {str(e)}")
+        print(f"{Fore.RED}Error getting network information: {str(e)}")
 
 def speed_test():
     """Perform an internet speed test"""
@@ -2298,36 +2316,71 @@ def speed_test():
         print(f"{Fore.YELLOW}Testing internet speed...")
         print(f"{Fore.CYAN}This may take a minute...")
         
-        # Test download speed
-        start_time = time.time()
-        response = requests.get("http://speedtest.ftp.otenet.gr/files/test100k.db", stream=True)
-        downloaded = 0
+        def download_speed():
+            urls = [
+                "https://speed.cloudflare.com/__down?bytes=25000000",  # 25MB file
+                "http://speedtest.ftp.otenet.gr/files/test100k.db",    # Backup URL
+            ]
+            
+            for url in urls:
+                try:
+                    start_time = time.time()
+                    response = requests.get(url, stream=True, timeout=10)
+                    downloaded = 0
+                    
+                    for data in response.iter_content(chunk_size=8192):
+                        if data:
+                            downloaded += len(data)
+                            
+                    duration = time.time() - start_time
+                    if duration > 0:
+                        return (downloaded * 8) / (1024 * 1024 * duration)  # Mbps
+                except:
+                    continue
+            return 0
+            
+        def upload_speed():
+            try:
+                # Generate 10MB of random data
+                data = b'X' * (10 * 1024 * 1024)  
+                start_time = time.time()
+                
+                response = requests.post(
+                    'https://speed.cloudflare.com/__up',
+                    data=data,
+                    timeout=10
+                )
+                
+                duration = time.time() - start_time
+                return (len(data) * 8) / (1024 * 1024 * duration)  # Mbps
+            except:
+                return 0
+                
+        def test_ping():
+            try:
+                start_time = time.time()
+                requests.get('https://www.cloudflare.com', timeout=5)
+                return (time.time() - start_time) * 1000  # ms
+            except:
+                return 999
         
-        for data in response.iter_content(chunk_size=4096):
-            downloaded += len(data)
+        print(f"{Fore.CYAN}Testing download speed...")
+        down_speed = download_speed()
         
-        duration = time.time() - start_time
-        download_speed = (downloaded * 8) / (1024 * 1024 * duration)  # Mbps
+        print(f"{Fore.CYAN}Testing upload speed...")
+        up_speed = upload_speed()
         
-        # Test upload speed using a small POST request
-        data = b'X' * 100000  # 100KB of data
-        start_time = time.time()
-        response = requests.post("https://httpbin.org/post", data=data)
-        duration = time.time() - start_time
-        upload_speed = (len(data) * 8) / (1024 * 1024 * duration)  # Mbps
-        
-        # Test ping
-        start_time = time.time()
-        requests.get("https://www.google.com")
-        ping = (time.time() - start_time) * 1000  # ms
+        print(f"{Fore.CYAN}Testing ping...")
+        ping = test_ping()
         
         print(f"\n{Fore.GREEN}Speed Test Results:")
-        print(f"{Fore.YELLOW}Download: {Fore.WHITE}{download_speed:.1f} Mbps")
-        print(f"{Fore.YELLOW}Upload: {Fore.WHITE}{upload_speed:.1f} Mbps")
+        print(f"{Fore.YELLOW}Download: {Fore.WHITE}{down_speed:.1f} Mbps")
+        print(f"{Fore.YELLOW}Upload: {Fore.WHITE}{up_speed:.1f} Mbps")
         print(f"{Fore.YELLOW}Ping: {Fore.WHITE}{ping:.0f} ms")
         
     except Exception as e:
         print(f"{Fore.RED}Error testing speed: {str(e)}")
+        print(f"{Fore.YELLOW}Tip: Check your internet connection")
 
 def dns_lookup():
     """Perform DNS lookups and reverse lookups"""
