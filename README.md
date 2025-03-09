@@ -1,8 +1,8 @@
-# Multitool v3.4
+# Multitool v3.4.1
 
 A comprehensive system and network management utility with advanced file operations.
 
-![screenshot of multitool](https://github.com/Darnix-a/Multitool/blob/main/multitool%20v3.4.png)
+![screenshot of multitool](https://github.com/Darnix-a/Multitool/blob/main/Multitool%20v3.4.1.png)
 
 ## Features
 
