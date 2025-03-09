@@ -27,6 +27,8 @@ from typing import Dict, List, Tuple, Optional, Union, Any
 import concurrent.futures
 import socket  # Add if not already present
 import requests  # Add this import
+import ctypes
+import winreg
 
 
 # Third-party imports
@@ -54,7 +56,7 @@ except ImportError:
 init(autoreset=True)
 
 # Global constants
-PROGRAM_NAME = "Multitool v3.5"
+PROGRAM_NAME = "Multitool v4.0"
 CHUNK_SIZE = 64 * 1024  # 64KB chunks for file operations
 MAX_WORKERS = 4  # Maximum number of worker threads for parallel operations
 
@@ -1667,6 +1669,7 @@ def system_resources():
         print(f"{Fore.CYAN}{'=' * 60}\n")
         
         cpu_count = psutil.cpu_count()
+        cpu_count = psutil.cpu_count()
         cpu_percent = psutil.cpu_percent(interval=1)
         cpu_freq = psutil.cpu_freq()
         print(f"{Fore.YELLOW}CPU Information:")
@@ -2015,7 +2018,7 @@ def process_explorer():
                     proc = psutil.Process(int(pid))
                     children = proc.children(recursive=True)
                     
-                    print(f"\n{Fore.CYAN}Process Details:")
+                    print(f"\n{Fore.GREEN}Process Details:")
                     print(f"{Fore.WHITE}Name: {proc.name()}")
                     print(f"Path: {proc.exe()}")
                     print(f"Status: {proc.status()}")
@@ -2751,6 +2754,306 @@ def dns_lookup():
     except Exception as e:
         print(f"{Fore.RED}Error performing DNS lookup: {str(e)}")
 
+def analyze_memory():
+    """Enhanced memory analysis with sorting and filtering options"""
+    try:
+        print(f"{Fore.CYAN}Memory Analysis")
+        
+        # Get initial process data
+        processes = []
+        for proc in psutil.process_iter(['pid', 'name', 'memory_info', 'cpu_percent', 'create_time']):
+            try:
+                info = proc.info
+                mem = info['memory_info']
+                processes.append({
+                    'pid': info['pid'],
+                    'name': info['name'],
+                    'memory': mem.rss,
+                    'cpu': info['cpu_percent'],
+                    'started': datetime.fromtimestamp(info['create_time'])
+                })
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        # Sort options
+        print(f"\n{Fore.YELLOW}Sort by:")
+        print("1. Memory Usage (default)")
+        print("2. CPU Usage")
+        print("3. Process Name")
+        print("4. Start Time")
+        
+        choice = input(f"\n{Fore.GREEN}Choose sort option (1-4): {Fore.WHITE}") or "1"
+        
+        # Sort based on user choice
+        if choice == "2":
+            processes.sort(key=lambda x: x['cpu'], reverse=True)
+            sort_by = "CPU Usage"
+        elif choice == "3":
+            processes.sort(key=lambda x: x['name'].lower())
+            sort_by = "Process Name"
+        elif choice == "4":
+            processes.sort(key=lambda x: x['started'], reverse=True)
+            sort_by = "Start Time"
+        else:
+            processes.sort(key=lambda x: x['memory'], reverse=True)
+            sort_by = "Memory Usage"
+
+        print(f"\n{Fore.CYAN}Processes sorted by {sort_by}:")
+        print(f"\n{'Process':<30} {'PID':>7} {'Memory':>10} {'CPU%':>7} {'Started':>20}")
+        print("-" * 77)
+
+        # Show top 25 processes
+        for proc in processes[:25]:
+            print(f"{proc['name'][:30]:<30} {proc['pid']:7d} "
+                  f"{humanize.naturalsize(proc['memory']):>10} "
+                  f"{proc['cpu']:6.1f}% "
+                  f"{proc['started'].strftime('%Y-%m-%d %H:%M:%S'):>20}")
+
+        # Show summary
+        total_memory = sum(p['memory'] for p in processes)
+        total_processes = len(processes)
+        print(f"\n{Fore.YELLOW}Summary:")
+        print(f"Total Processes: {total_processes}")
+        print(f"Total Memory Used: {humanize.naturalsize(total_memory)}")
+
+    except Exception as e:
+        print(f"{Fore.RED}Error: {str(e)}")
+
+def scan_handles():
+    """Enhanced handle scanner with filtering and detailed view"""
+    try:
+        print(f"{Fore.CYAN}Handle Scanner\n")
+        
+        # Get process data
+        processes = []
+        for proc in psutil.process_iter(['pid', 'name', 'num_handles', 'memory_info']):
+            try:
+                info = proc.info
+                if info['num_handles'] > 0:  # Only include processes with handles
+                    processes.append({
+                        'pid': info['pid'],
+                        'name': info['name'],
+                        'handles': info['num_handles'],
+                        'memory': info['memory_info'].rss
+                    })
+            except:
+                continue
+
+        # Filter options
+        print(f"{Fore.YELLOW}Filter by:")
+        print("1. Show all processes")
+        print("2. Show processes with high handle count (>100)")
+        print("3. Show system processes only")
+        print("4. Show user processes only")
+        
+        choice = input(f"\n{Fore.GREEN}Choose filter (1-4): {Fore.WHITE}") or "1"
+
+        # Apply filter
+        if choice == "2":
+            processes = [p for p in processes if p['handles'] > 100]
+        elif choice == "3":
+            processes = [p for p in processes if p['name'].lower() in ['system', 'svchost.exe', 'services.exe']]
+        elif choice == "4":
+            system_procs = ['system', 'svchost.exe', 'services.exe']
+            processes = [p for p in processes if p['name'].lower() not in system_procs]
+
+        # Sort by handle count
+        processes.sort(key=lambda x: x['handles'], reverse=True)
+
+        print(f"\n{'Process':<30} {'PID':>7} {'Handles':>8} {'Memory':>10}")
+        print("-" * 58)
+
+        for proc in processes[:20]:  # Show top 20
+            print(f"{proc['name'][:30]:<30} {proc['pid']:7d} {proc['handles']:8d} "
+                  f"{humanize.naturalsize(proc['memory']):>10}")
+
+        print(f"\n{Fore.YELLOW}Summary:")
+        print(f"Total processes shown: {len(processes)}")
+        print(f"Total handles: {sum(p['handles'] for p in processes):,}")
+        
+    except Exception as e:
+        print(f"{Fore.RED}Error: {str(e)}")
+
+def map_dlls():
+    """Enhanced DLL mapper with filtering and security analysis"""
+    try:
+        print(f"{Fore.CYAN}DLL Mapper\n")
+
+        # Known DLL categories
+        system_dlls = {'ntdll.dll', 'kernel32.dll', 'user32.dll', 'gdi32.dll'}
+        security_dlls = {'sechost.dll', 'cryptsp.dll', 'bcrypt.dll'}
+        network_dlls = {'ws2_32.dll', 'wininet.dll', 'urlmon.dll'}
+        
+        processes = []
+        for proc in psutil.process_iter(['pid', 'name']):
+            try:
+                dlls = []
+                maps = proc.memory_maps()
+                for m in maps:
+                    if m.path.lower().endswith('.dll'):
+                        dll_name = os.path.basename(m.path).lower()
+                        category = 'System' if dll_name in system_dlls else \
+                                 'Security' if dll_name in security_dlls else \
+                                 'Network' if dll_name in network_dlls else 'Other'
+                        dlls.append({'name': dll_name, 'path': m.path, 'category': category})
+                
+                if dlls:  # Only add processes with DLLs
+                    processes.append({
+                        'pid': proc.pid,
+                        'name': proc.name(),
+                        'dlls': dlls
+                    })
+            except:
+                continue
+
+        # Display options
+        print(f"{Fore.YELLOW}View options:")
+        print("1. Show all DLLs")
+        print("2. Show system DLLs only")
+        print("3. Show security DLLs only")
+        print("4. Show network DLLs only")
+        print("5. Show other DLLs only")
+
+        choice = input(f"\n{Fore.GREEN}Choose view option (1-5): {Fore.WHITE}") or "1"
+
+        for proc in processes[:10]:  # Show first 10 processes
+            dll_count = len(proc['dlls'])
+            if dll_count > 0:
+                print(f"\n{Fore.YELLOW}Process: {proc['name']} (PID: {proc['pid']})")
+                
+                # Filter DLLs based on choice
+                filtered_dlls = proc['dlls']
+                if choice == "2":
+                    filtered_dlls = [d for d in proc['dlls'] if d['category'] == 'System']
+                elif choice == "3":
+                    filtered_dlls = [d for d in proc['dlls'] if d['category'] == 'Security']
+                elif choice == "4":
+                    filtered_dlls = [d for d in proc['dlls'] if d['category'] == 'Network']
+                elif choice == "5":
+                    filtered_dlls = [d for d in proc['dlls'] if d['category'] == 'Other']
+
+                for dll in filtered_dlls[:5]:  # Show first 5 DLLs
+                    print(f"{Fore.WHITE}  • {dll['name']} ({dll['category']})")
+                
+                if len(filtered_dlls) > 5:
+                    print(f"    ... and {len(filtered_dlls)-5} more DLLs")
+
+    except Exception as e:
+        print(f"{Fore.RED}Error: {str(e)}")
+
+def analyze_threads():
+    """Enhanced thread analyzer with detailed statistics"""
+    try:
+        print(f"{Fore.CYAN}Thread Analyzer\n")
+        
+        processes = []
+        for proc in psutil.process_iter(['pid', 'name', 'num_threads']):
+            try:
+                threads = proc.threads()
+                thread_stats = {
+                    'total': len(threads),
+                    'active': sum(1 for t in threads if t.system_time > 0 or t.user_time > 0),
+                    'idle': sum(1 for t in threads if t.system_time == 0 and t.user_time == 0),
+                    'total_cpu': sum(t.system_time + t.user_time for t in threads)
+                }
+                
+                if thread_stats['total'] > 0:  # Only include processes with threads
+                    processes.append({
+                        'pid': proc.pid,
+                        'name': proc.name(),
+                        'threads': thread_stats
+                    })
+            except:
+                continue
+
+        # Sort processes by thread count
+        processes.sort(key=lambda x: x['threads']['total'], reverse=True)
+
+        print(f"{Fore.YELLOW}Top Processes by Thread Count:")
+        print(f"\n{'Process':<30} {'PID':>7} {'Threads':>8} {'Active':>8} {'CPU Time':>10}")
+        print("-" * 66)
+
+        for proc in processes[:15]:  # Show top 15 processes
+            stats = proc['threads']
+            print(f"{proc['name'][:30]:<30} {proc['pid']:7d} {stats['total']:8d} "
+                  f"{stats['active']:8d} {stats['total_cpu']:10.1f}s")
+
+        # System-wide statistics
+        total_threads = sum(p['threads']['total'] for p in processes)
+        active_threads = sum(p['threads']['active'] for p in processes)
+        total_processes = len(processes)
+
+        print(f"\n{Fore.YELLOW}System Statistics:")
+        print(f"Total Processes: {total_processes}")
+        print(f"Total Threads: {total_threads}")
+        print(f"Active Threads: {active_threads}")
+        print(f"Average Threads per Process: {total_threads/total_processes:.1f}")
+
+    except Exception as e:
+        print(f"{Fore.RED}Error: {str(e)}")
+
+def trace_stacks():
+    """Enhanced stack tracer with better error handling and information display"""
+    try:
+        print(f"{Fore.CYAN}Stack Tracer\n")
+        
+        # List available processes
+        processes = []
+        for proc in psutil.process_iter(['pid', 'name', 'num_threads']):
+            try:
+                processes.append({
+                    'pid': proc.pid,
+                    'name': proc.name(),
+                    'threads': proc.num_threads()
+                })
+            except:
+                continue
+
+        # Show top processes
+        print(f"{Fore.YELLOW}Active Processes:")
+        print(f"\n{'PID':>7} {'Process':<30} {'Threads':>8}")
+        print("-" * 47)
+
+        for proc in sorted(processes, key=lambda x: x['threads'], reverse=True)[:10]:
+            print(f"{proc['pid']:7d} {proc['name'][:30]:<30} {proc['threads']:8d}")
+
+        # Get target process
+        target_pid = input(f"\n{Fore.YELLOW}Enter PID to trace (or Enter to cancel): {Fore.WHITE}")
+        if not target_pid:
+            return
+
+        try:
+            proc = psutil.Process(int(target_pid))
+            print(f"\n{Fore.GREEN}Process: {proc.name()} (PID: {proc.pid})")
+            
+            # Get thread information
+            threads = proc.threads()
+            print(f"\n{Fore.YELLOW}Thread Information:")
+            print(f"{'TID':>10} {'User Time':>12} {'System Time':>12} {'Started':>20}")
+            print("-" * 56)
+
+            for thread in threads:
+                # Calculate thread start time
+                start_time = datetime.now() - timedelta(seconds=(thread.user_time + thread.system_time))
+                print(f"{thread.id:10d} {thread.user_time:11.1f}s {thread.system_time:11.1f}s "
+                      f"{start_time.strftime('%Y-%m-%d %H:%M:%S'):>20}")
+
+            # Show summary
+            print(f"\n{Fore.YELLOW}Summary:")
+            print(f"Total Threads: {len(threads)}")
+            print(f"Total CPU Time: {sum(t.user_time + t.system_time for t in threads):.1f}s")
+            print(f"Average Time per Thread: {sum(t.user_time + t.system_time for t in threads)/len(threads):.1f}s")
+
+        except psutil.NoSuchProcess:
+            print(f"{Fore.RED}Process not found!")
+        except psutil.AccessDenied:
+            print(f"{Fore.RED}Access denied! Try running as administrator.")
+        except ValueError:
+            print(f"{Fore.RED}Invalid PID!")
+
+    except Exception as e:
+        print(f"{Fore.RED}Error: {str(e)}")
+
 def main_menu():
     while True:
         clear_screen()
@@ -2816,9 +3119,14 @@ def main_menu():
 
         advanced_options = [
             "Startup Manager",
-            "System Restore",
+            "System Restore", 
             "Advanced Search",
-            "Process Explorer"
+            "Process Explorer",
+            "Memory Analysis",
+            "Handle Scanner", 
+            "DLL Mapper",
+            "Thread Analyzer",
+            "Stack Tracer",
         ]
 
         menu_sections = [
@@ -2835,13 +3143,13 @@ def main_menu():
             display_menu_section(title, options, start_num)
             print(f"{Fore.CYAN}╠═{'═' * (width-4)}═╣")
         
-        print(f"{Fore.CYAN}║ {Fore.RED}Enter '35' to exit{' ' * (width-21)}{Fore.CYAN}║")
+        print(f"{Fore.CYAN}║ {Fore.RED}Enter '40' to exit{' ' * (width-21)}{Fore.CYAN}║")
         print(f"{Fore.CYAN}╚═{'═' * (width-4)}═╝")
 
         try:
-            choice = input(f"\n{Fore.GREEN}Enter your choice (1-35): {Fore.WHITE}")
+            choice = input(f"\n{Fore.GREEN}Enter your choice (1-40): {Fore.WHITE}")
 
-            if choice.lower() == '35':
+            if choice.lower() == '41':
                 display_exit_screen()
                 break
                 
@@ -2979,13 +3287,9 @@ def main_menu():
                     for error in results["errors"]:
                         print(f"• {error}")
                 
-                if not results["warnings"] and not results["errors"]:
-                    print(f"\n{Fore.GREEN}No issues detected. Your disk appears to be healthy!")
-                elif results["errors"]:
-                    print(f"\n{Fore.RED}Disk health issues detected! Consider running a full disk check.")
-                else:
-                    print(f"\n{Fore.YELLOW}Minor issues found. Consider disk maintenance soon.")
-                
+                if not any(issues.values()):
+                    print(f"\n{Fore.GREEN}No issues found in the directory.")
+                    
             elif choice == '16':
                 screen_capture()
                 
@@ -3100,6 +3404,19 @@ def main_menu():
                 advanced_search()
             elif choice == '34':         
                 process_explorer()
+            elif choice == "35":
+                analyze_memory()
+            elif choice == "36":
+                scan_handles()
+            elif choice == "37":
+                map_dlls()
+            elif choice == "38":
+                analyze_threads()
+            elif choice == "39":
+                trace_stacks()
+            elif choice == "40":
+                display_exit_screen()
+                break
 
             if choice != '1':
                 input(f"\n{Fore.CYAN}Press Enter to continue...{Fore.WHITE}")
