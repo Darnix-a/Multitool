@@ -48,12 +48,12 @@ A comprehensive system and network management utility with advanced file operati
 - Service management
 
 ### Advanced Tools
--Startup Manager
- -System Restore
- -Advanced Search
- -Process Explorer
- -Memory Analysis
- -Handle Scanner
+- Startup Manager
+- System Restore
+- Advanced Search
+- Process Explorer
+- Memory Analysis
+- Handle Scanner
 - DLL Mapper
 - Thread Analyzer
 - Stack Tracer
