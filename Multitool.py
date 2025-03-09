@@ -2464,7 +2464,7 @@ def main_menu():
             display_menu_section(title, options, start_num)
             print(f"{Fore.CYAN}╠═{'═' * (width-4)}═╣")
         
-        print(f"{Fore.CYAN}║ {Fore.RED}Enter '35' to exit{' ' * (width-19)}{Fore.CYAN}║")
+        print(f"{Fore.CYAN}║ {Fore.RED}Enter '35' to exit{' ' * (width-21)}{Fore.CYAN}║")
         print(f"{Fore.CYAN}╚═{'═' * (width-4)}═╝")
 
         try:
