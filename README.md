@@ -48,10 +48,15 @@ A comprehensive system and network management utility with advanced file operati
 - Service management
 
 ### Advanced Tools
-- Startup program manager
-- System restore point creation
-- Advanced file search
-- Process explorer
+-Startup Manager
+ -System Restore
+ -Advanced Search
+ -Process Explorer
+ -Memory Analysis
+ -Handle Scanner
+- DLL Mapper
+- Thread Analyzer
+- Stack Tracer
 
 ## Requirements
 - Windows OS
