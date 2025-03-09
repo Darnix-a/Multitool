@@ -54,7 +54,7 @@ except ImportError:
 init(autoreset=True)
 
 # Global constants
-PROGRAM_NAME = "Multitool v3.4.1"
+PROGRAM_NAME = "Multitool v3.5"
 CHUNK_SIZE = 64 * 1024  # 64KB chunks for file operations
 MAX_WORKERS = 4  # Maximum number of worker threads for parallel operations
 
@@ -2192,55 +2192,85 @@ def network_scan():
     except Exception as e:
         print(f"{Fore.RED}Error scanning network: {str(e)}")
 
-def port_scanner():
-    """Scan ports on a target IP address"""
+def ip_lookup(ip=None):
+    """Comprehensive IP address lookup tool"""
     try:
-        target = input(f"{Fore.YELLOW}Enter IP address to scan: {Fore.WHITE}")
-        print(f"{Fore.YELLOW}Select scan type:")
-        print(f"{Fore.WHITE}1. Quick scan (common ports)")
-        print(f"{Fore.WHITE}2. Full scan (1-1024)")
-        print(f"{Fore.WHITE}3. Custom port range")
+        if not ip:
+            ip = input(f"{Fore.YELLOW}Enter IP address to lookup: {Fore.WHITE}")
+            
+        print(f"\n{Fore.CYAN}Gathering information about {ip}...")
         
-        choice = input(f"\n{Fore.GREEN}Choose option (1-3): {Fore.WHITE}")
-        
-        if choice == "1":
-            ports = [21, 22, 23, 25, 53, 80, 110, 139, 443, 445, 3306, 3389]
-        elif choice == "2":
-            ports = range(1, 1025)
-        elif choice == "3":
-            start = int(input(f"{Fore.YELLOW}Start port: {Fore.WHITE}"))
-            end = int(input(f"{Fore.YELLOW}End port: {Fore.WHITE}"))
-            ports = range(start, end + 1)
-        else:
+        # Basic IP validation
+        try:
+            socket.inet_aton(ip)
+        except socket.error:
+            print(f"{Fore.RED}Invalid IP address format!")
             return
             
-        open_ports = []
-        print(f"\n{Fore.CYAN}Scanning ports on {target}...")
+        # Get geolocation and network info
+        response = requests.get(f"http://ip-api.com/json/{ip}").json()
         
-        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
-            futures = []
-            for port in ports:
-                futures.append(executor.submit(try_connect, target, port))
+        if response['status'] == 'success':
+            print(f"\n{Fore.GREEN}Location Information:")
+            print(f"{Fore.YELLOW}Country: {Fore.WHITE}{response.get('country', 'Unknown')}")
+            print(f"{Fore.YELLOW}Region: {Fore.WHITE}{response.get('regionName', 'Unknown')}")
+            print(f"{Fore.YELLOW}City: {Fore.WHITE}{response.get('city', 'Unknown')}")
+            print(f"{Fore.YELLOW}ZIP: {Fore.WHITE}{response.get('zip', 'Unknown')}")
+            print(f"{Fore.YELLOW}Timezone: {Fore.WHITE}{response.get('timezone', 'Unknown')}")
+            print(f"{Fore.YELLOW}Coordinates: {Fore.WHITE}{response.get('lat', 'Unknown')}, {response.get('lon', 'Unknown')}")
+            
+            print(f"\n{Fore.GREEN}Network Information:")
+            print(f"{Fore.YELLOW}ISP: {Fore.WHITE}{response.get('isp', 'Unknown')}")
+            print(f"{Fore.YELLOW}Organization: {Fore.WHITE}{response.get('org', 'Unknown')}")
+            print(f"{Fore.YELLOW}ASN: {Fore.WHITE}{response.get('as', 'Unknown')}")
+            
+            # Additional checks
+            is_hosting = any(keyword in response.get('org', '').lower() for keyword in ['hosting', 'cloud', 'data center', 'server'])
+            is_vpn = any(keyword in response.get('org', '').lower() for keyword in ['vpn', 'proxy'])
+            
+            # Get additional data from other APIs
+            try:
+                # Check if IP is in blacklists
+                abuse_check = requests.get(f"https://api.abuseipdb.com/api/v2/check?ipAddress={ip}", 
+                                        headers={'Key': 'YOUR_API_KEY'}).json()
+                blacklist_status = abuse_check.get('data', {}).get('totalReports', 'Unknown')
+            except:
+                blacklist_status = "Could not check"
                 
-            for port, future in zip(ports, futures):
-                if future.result():
-                    open_ports.append(port)
-                    print(f"{Fore.GREEN}Port {port} is open!")
-        
-        if not open_ports:
-            print(f"{Fore.YELLOW}No open ports found.")
+            print(f"\n{Fore.GREEN}Security Analysis:")
+            print(f"{Fore.YELLOW}IP Type: {Fore.WHITE}{'Hosting/Cloud Provider' if is_hosting else 'Regular IP'}")
+            print(f"{Fore.YELLOW}VPN/Proxy: {Fore.WHITE}{'Likely' if is_vpn else 'Unknown'}")
+            print(f"{Fore.YELLOW}Blacklist Reports: {Fore.WHITE}{blacklist_status}")
+            
+            # Potential uses and risks
+            print(f"\n{Fore.GREEN}Potential Uses & Security Implications:")
+            if is_hosting:
+                print(f"{Fore.YELLOW}• {Fore.WHITE}This IP belongs to a hosting provider or data center")
+                print(f"{Fore.YELLOW}• {Fore.WHITE}Could be running web services, game servers, or cloud applications")
+                print(f"{Fore.YELLOW}• {Fore.WHITE}May need to be whitelisted for certain services")
+            elif is_vpn:
+                print(f"{Fore.YELLOW}• {Fore.WHITE}This appears to be a VPN or proxy service")
+                print(f"{Fore.YELLOW}• {Fore.WHITE}Could be used for anonymity or bypassing geo-restrictions")
+                print(f"{Fore.YELLOW}• {Fore.WHITE}Consider blocking if unauthorized access is a concern")
+            else:
+                print(f"{Fore.YELLOW}• {Fore.WHITE}This appears to be a regular ISP-assigned IP")
+                print(f"{Fore.YELLOW}• {Fore.WHITE}Typical use cases: home/office internet, personal devices")
+                print(f"{Fore.YELLOW}• {Fore.WHITE}Standard security measures recommended")
+            
+            # Security recommendations
+            print(f"\n{Fore.GREEN}Security Recommendations:")
+            if blacklist_status != "Unknown" and blacklist_status > 0:
+                print(f"{Fore.RED}• This IP has been reported for suspicious activity")
+                print(f"{Fore.RED}• Consider blocking or monitoring traffic from this IP")
+            if is_hosting:
+                print(f"{Fore.YELLOW}• Verify the legitimacy of any services running on this IP")
+                print(f"{Fore.YELLOW}• Implement proper firewall rules if hosting sensitive services")
+            
+        else:
+            print(f"{Fore.RED}Could not retrieve information for this IP!")
             
     except Exception as e:
-        print(f"{Fore.RED}Error scanning ports: {str(e)}")
-
-def try_connect(ip, port):
-    """Helper function to test if a port is open"""
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(0.5)
-            return s.connect_ex((ip, port)) == 0
-    except:
-        return False
+        print(f"{Fore.RED}Error during IP lookup: {str(e)}")
 
 def wifi_info():
     """Display information about WiFi networks and Ethernet connections across different operating systems"""
@@ -2771,10 +2801,10 @@ def main_menu():
         ]
         
         networking_options = [
-            "Network Usage",  # Moved from System Monitoring
+            "Network Usage",
             "Network Scanner",
-            "Port Scanner",
-            "WiFi Information",
+            "IP Lookup",  # Changed from "Port Scanner"
+            "Network Information",  # Changed from "WiFi Information"
             "Speed Test",
             "DNS Tools"
         ]
@@ -3051,7 +3081,7 @@ def main_menu():
             elif choice == '24':
                 network_scan()
             elif choice == '25':
-                port_scanner()
+                ip_lookup()
             elif choice == '26':
                 wifi_info()
             elif choice == '27':

@@ -1,4 +1,4 @@
-# Multitool v3.4.1
+# Multitool v3.5.0
 
 A comprehensive system and network management utility with advanced file operations.
 
@@ -38,7 +38,7 @@ A comprehensive system and network management utility with advanced file operati
 ### Networking Tools
 - Network traffic monitoring
 - Local network device scanner
-- Port scanner
+- IP Lookup
 - WiFi network analyzer
 - Internet speed tester
 - DNS lookup tools
