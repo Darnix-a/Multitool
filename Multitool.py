@@ -2455,7 +2455,7 @@ def main_menu():
             ("Organization", organize_options, 8),    
             ("System Tools", system_options, 13),   
             ("Security", security_options, 17),    
-            ("Networking Tools", networking_options, 22),  # Updated from 23
+            ("Networking Tools", networking_options, 23),  # Updated from 23
             ("System Monitoring", system_monitoring_options, 29), # Updated from 29  
             ("Advanced Tools", advanced_options, 31)  # Updated from 32
         ]
