@@ -2,7 +2,7 @@
 
 A comprehensive system and network management utility with advanced file operations.
 
-![screenshot](https://github.com/Darnix-a/Multitool/blob/main/multitool%20v3.5.png)
+![screenshot](https://github.com/Darnix-a/Multitool/blob/main/Multitool%20v4.0.png)
 
 ## Features
 
