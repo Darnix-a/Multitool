@@ -59,7 +59,8 @@ A comprehensive system and network management utility with advanced file operati
 - Stack Tracer
 
 ## Requirements
-- Windows OS
+- For the .exe: Windows OS
+- for self compile: Any OS
 - Administrator privileges
 
 ## Installation 
