@@ -1,138 +1,97 @@
-# Multitool v4.1
+# Multitool v3.5.0
 
 A comprehensive system and network management utility with advanced file operations.
 
 ![screenshot of multitool](https://github.com/Darnix-a/Multitool/blob/main/Multitool%20v3.4.1.png)
 
-## 🔍 Overview
-
-Multitool is an educational software designed to demonstrate various system management capabilities in a Windows environment. This tool serves as both a practical utility and a learning platform for understanding system operations.
-
-## ⚠️ Disclaimer
-
-**IMPORTANT: READ BEFORE DOWNLOADING OR USING**
-
-- **Educational Purpose Only**: This software is provided strictly for educational and learning purposes.
-- **User Responsibility**: You assume full responsibility for how you use this tool.
-- **No Liability**: The creators and contributors accept no liability for any damage, data loss, or other negative consequences resulting from the use or misuse of this software.
-- **Legal Compliance**: Users must comply with all applicable local, state, national, and international laws when using this software.
-- **Not for Malicious Use**: This tool should never be used for unauthorized access, data theft, or any other illegal activities.
-- **System Modifications**: Several functions can make significant changes to your system. Always back up important data before use.
-
-## 🛠️ Features
+## Features
 
 ### File Management
-- Smart directory navigation with intuitive controls
-- Advanced file search with multiple filtering options
-- Duplicate file detection and resolution
-- Quick file operations (copy, move, delete)
-- Comprehensive file preview functionality
-- Efficient bulk renaming capabilities
-- Automated filename cleaning and standardization
+- Smart directory navigation
+- Advanced file search
+- Duplicate file detection
+- Quick file operations
+- File preview
+- Bulk renaming
+- Filename cleaning
 
 ### Organization
-- Intelligent automatic file categorization
-- Customizable file type management
-- Real-time directory monitoring
-- Detailed space usage analysis
-- Comprehensive file statistics
+- Automatic file categorization
+- File type management
+- Directory monitoring
+- Space analysis
+- File statistics
 
 ### System Tools
-- In-depth system information display
-- Efficient cache cleaning procedures
-- Proactive disk health monitoring
-- Versatile screen capture utility
+- System information display
+- Cache cleaning
+- Disk health monitoring
+- Screen capture utility
 
 ### Security
-- Strong file encryption/decryption capabilities
-- Granular permission management
-- Thorough directory security scanning
-- Advanced file integrity verification
-- Secure file corruption (data destruction) **[FOR EDUCATIONAL PURPOSES ONLY]**
+- File encryption/decryption
+- Permission management
+- Directory security scanning
+- File integrity verification
+- Secure file corruption (data destruction)
 
 ### Networking Tools
-- Real-time network traffic monitoring
-- Comprehensive local network device scanner
-- Detailed IP lookup functionality
-- In-depth WiFi network analyzer
-- Accurate internet speed tester
-- Robust DNS lookup tools
+- Network traffic monitoring
+- Local network device scanner
+- IP Lookup
+- WiFi network analyzer
+- Internet speed tester
+- DNS lookup tools
 
 ### System Monitoring
-- Detailed resource usage tracking 
-- Comprehensive service management interface
+- Resource usage tracking 
+- Service management
 
 ### Advanced Tools
-- Complete startup program manager
+- Startup program manager
 - System restore point creation
-- Advanced file search with regex support
-- Detailed process explorer
+- Advanced file search
+- Process explorer
 
-## 💻 Requirements
-- Windows OS (10 or 11 recommended)
+## Requirements
+- Windows OS
 - Administrator privileges
-- Minimum 4GB RAM
-- 100MB free disk space
 
-## 📥 Installation 
+## Installation 
 
 1. Download the latest release from the [Releases](https://github.com/Darnix-a/Multitool/releases) page
-2. Verify file integrity with provided checksums
-3. Run the exe file
-4. If prompted, allow administrator access 
-5. Review and accept the disclaimer before proceeding
+2. Run the exe file
+3. If prompted, allow administrator access 
 
-## 📚 Usage
+## Usage 📚
 
-1. Launch the program with administrator privileges
-2. Navigate using the clearly numbered menu interface
-3. Follow detailed on-screen instructions for each tool
-4. Use the help function ('?' or 'help') for additional guidance on any screen
+1. Launch the program
+2. Navigate using the numbered menu
+3. Follow on-screen instructions for each tool
 
-## 🔒 Security Notice
+## Security Notice
+Some features like system monitoring and file operations require administrator privileges. The program will request elevation when needed.
 
-Several features require administrator privileges for proper operation:
-- System monitoring functions
-- File operations in protected directories
-- Network scanning capabilities
-- System modification tools
+## Warning ⚠️
 
-The program will request elevation when needed. Always verify what permissions you're granting.
+The file corruption tool is included for testing purposes. Use with extreme caution as it permanently damages files without possibility of recovery.
 
-## ⚠️ Critical Warning
+## Contributing 🤝
 
-The file corruption tool is included **STRICTLY FOR EDUCATIONAL PURPOSES**. It demonstrates how data can become unrecoverable when improperly handled. Use with extreme caution as it permanently damages files without possibility of recovery. We strongly recommend:
+Feel free to fork and submit pull requests! Please follow the existing code style.
 
-- Only use on test files you've created specifically for this purpose
-- Never use on important documents or system files
-- Always run in a controlled environment
-- Consider using a virtual machine for testing this feature
+## License 📄
 
-## 🤝 Contributing
+MIT License - See LICENSE file for details
 
-We welcome community contributions to improve this educational tool:
-- Fork the repository
-- Create a feature branch
-- Submit pull requests with detailed descriptions
-- Follow existing code style and documentation practices
-- Add tests for new functionality when possible
+## Credits 👏
 
-## 📄 License
+Created by Darnix
+(with help from beastdog27 on discord for v3.3)
 
-MIT License - See LICENSE file for complete details
-
-## 👏 Credits - Primary contributions by Darnix
-- Special thanks to beastdog27 for assistance
-- Special thanks and love and kisses to [jxsh](https://github.com/jxshuaa) for assistance with cpu burner
-
-## 💡 Support
+## Support 💡
 
 If you encounter any issues:
-1. Ensure you're running the program as an administrator
-2. Verify that all system requirements are met
-3. Check the [issues page](https://github.com/darnix-a/Multitool/issues) for known problems
-4. Feel free to open a new issue for any bugs or feature requests
-
-## 🌟 Acknowledgments
-
-We appreciate the open-source community for their contributions and support. Your feedback helps us improve and expand the capabilities of Multitool.
+1. Make sure you're running as administrator
+2. Check if all requirements are met
+3. [Open an issue](https://github.com/darnix-a/Multitool/issues)
