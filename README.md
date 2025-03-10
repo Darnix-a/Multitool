@@ -1,8 +1,8 @@
-# Multitool v3.5.0
+# Multitool v3.5
 
 A comprehensive system and network management utility with advanced file operations.
 
-![screenshot of multitool](https://github.com/Darnix-a/Multitool/blob/main/Multitool%20v3.4.1.png)
+![Screenshot of Multitool](https://github.com/Darnix-a/Multitool/blob/main/multitool.png)
 
 ## Features
 
@@ -38,7 +38,7 @@ A comprehensive system and network management utility with advanced file operati
 ### Networking Tools
 - Network traffic monitoring
 - Local network device scanner
-- IP Lookup
+- Ip Lookup
 - WiFi network analyzer
 - Internet speed tester
 - DNS lookup tools
