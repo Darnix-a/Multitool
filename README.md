@@ -122,8 +122,8 @@ We welcome community contributions to improve this educational tool:
 MIT License - See LICENSE file for complete details
 
 ## 👏 Credits - Primary contributions by Darnix
-- Special thanks to beastdog27 for assistance with version 3.3
-- Special thanks and love and kisses to (jxsh)[https://github.com/jxshuaa] for assistance with cpu burner
+- Special thanks to beastdog27 for assistance
+- Special thanks and love and kisses to [jxsh](https://github.com/jxshuaa) for assistance with cpu burner
 
 ## 💡 Support
 
