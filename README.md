@@ -122,15 +122,14 @@ We welcome community contributions to improve this educational tool:
 MIT License - See LICENSE file for complete details
 
 ## 👏 Credits - Primary contributions by Darnix
-- Special thanks to beastdog27 for assistance with version 3.3
-- Special thanks and love and kisses to (jxsh)[https://github.com/jxshuaa] for assistance with cpu burner
-
+- Special thanks to beastdog27
+- Special thanks to [jxsh](https://github.com/jxshuaa)
 ## 💡 Support
 
 If you encounter any issues:
 1. Ensure you're running the program as an administrator
 2. Verify that all system requirements are met
-3. Check the [issues page](https://github.com/darnix-a/Multitool/issues) for known problems
+3. Check the [issues page]https://github.com/darnix-a/Multitool/issues) for known problems
 4. Feel free to open a new issue for any bugs or feature requests
 
 ## 🌟 Acknowledgments
