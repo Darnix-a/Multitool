@@ -69,7 +69,8 @@ Multitool is an educational software designed to demonstrate various system mana
 - Detailed process explorer
 
 ## 💻 Requirements
-- Windows OS (10 or 11 recommended)
+- For Compiled .exe: Windows OS (10 or 11 recommended)
+- For self Compiling: Any OS!
 - Administrator privileges
 - Minimum 4GB RAM
 - 100MB free disk space
