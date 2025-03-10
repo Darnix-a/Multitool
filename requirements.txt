@@ -14,3 +14,6 @@ pyperclip
 winshell
 requests
 dnspython
+scapy
+multiprocessing
+time
